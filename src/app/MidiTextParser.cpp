@@ -54,6 +54,29 @@ static unordered_map<char,int> NOTES = {
 {'b', 11}
 };
 
+static unordered_map<std::string, int> CTRL_NAMES = {
+{ "vib", 1 }, { "vibrato", 1 },
+{ "mod", 1 }, { "modulation", 1 },
+{ "portatime", 5 }, { "portamentotime", 5 },
+{ "volume", 7 }, { "vol", 7 },
+{ "pan", 10 }, { "panning", 10 },
+{ "expression", 11 }, { "expr", 11 },
+{ "sustain", 64 }, { "hold", 64 }, { "pedal", 64 },
+{ "portamento", 65 }, { "porta", 65 },
+{ "sostenuto", 66 },
+{ "soft", 67 },
+{ "resonnance", 71 }, { "filterq", 71 }, 
+{ "release", 72 },
+{ "attack", 73 },
+{ "brightness", 74 }, { "filtercutoff", 74 },
+{ "decay", 75 },
+{ "vibratorate", 76 },
+{ "vibratodepth", 77 },
+{ "vibratodelay", 78 },
+{ "reverb", 91 },
+{ "chorus", 93 }
+};
+
 static lua_State* L = NULL;
 static const string ALTER_P1 = "#+^'>", ALTER_M1 = "_-<,";
 
@@ -382,8 +405,13 @@ break;
 case 'n': 
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 10, ParseSimpleInt(e, ch, 0, 127)));
 break;
-case 'u':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xD0+curChan, ParseSimpleInt(e, ch, 0, 127)));
+case 'u': {
+int val = ParseSimpleInt(e, ch, 0, 127, -1, false);
+if (val>=0) m.events.push_back(MidiEvent(ch.pos, 0, 0xD0+curChan, val));
+else m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 66, 127));
+}break;
+case 'U':
+m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 66, 0));
 break;
 case 'q':
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 67, 127));
@@ -447,7 +475,7 @@ else {
 i = mark.start;
 mark.count++;
 }}break;
-default: goto unknown;
+default: throw logic_error("Unknown command");
 }//switch short command
 else if (e.cmd.size()==1 && e.val.empty() && e.var.empty()) switch(e.cmd[0]){
 case 'X': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 1)); break;
@@ -478,11 +506,17 @@ m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 0, (msb>>7)&0x7F));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 32, msb&0x7F));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xC0+curChan, lsb&0x7F));
 }break;
-default: goto unknown;
+default: throw logic_error("Unknown command");
 }//switch long command
 else if (e.cmd==("ctrl")) {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
-int ctrl = ParseSimpleInt(v[0], ch, 0, 127), val = ParseSimpleInt(v[1], ch, 0, 127);
+int ctrl = ParseSimpleInt(v[0], ch, 0, 127, -1, false);
+int val = ParseSimpleInt(v[1], ch, 0, 127);
+if (ctrl<0) {
+auto it = CTRL_NAMES.find(v[0]);
+if (it==CTRL_NAMES.end()) throw logic_error("Unknown command");
+ctrl = it->second;
+}
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, ctrl, val));
 }
 else if (e.cmd==("rpn")) {
@@ -502,15 +536,6 @@ m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 99, chsb));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 98, clsb));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6, vhsb));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 38, vlsb));
-}
-else if (e.cmd==("bfx")) {
-vector<string> v = SplitLongValue(e,ch, 3, 3);
-int chsb = ParseSimpleInt(v[0], ch, 0, 127), clsb = ParseSimpleInt(v[1], ch, 0, 127),
-val = ParseSimpleInt(v[2], ch, 0, 16383);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 102, chsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 103, clsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 105, val&0x7F));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 104, val>>7));
 }
 else if (e.cmd==("echo")) {
 if (e.longval==("off")) { ch.echo.duration = ch.echo.volume = ch.echo.count = 0; }
@@ -594,10 +619,18 @@ case 'c': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, ctrl, 0, min, max, &Mi
 case 'k': AddSlide(m.events, ch.pos, dur, 0xA0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); break;
 case 'h': AddSlide(m.events, ch.pos, dur, 0xE0 + curChan, 0, 0, min, max, &MidiEvent::data1); break;
 case 'u': AddSlide(m.events, ch.pos, dur, 0xD0 + curChan, 0, 0, min, max, &MidiEvent::data1); break;
-default: goto unknown;
+default: throw logic_error("Unknown command");
 }}
 else if (starts_with(e.cmd, ("$"))) SetVariable(ch, e.cmd.substr(1), trim_copy(e.longval));
-else unknown: throw logic_error("Unknown command");
+else {
+auto it = CTRL_NAMES.find(e.cmd);
+if (it!=CTRL_NAMES.end()) {
+int val;
+if (e.longval=="on") val=127;
+else if (e.longval=="off") val=0;
+else val = ParseSimpleInt(e.longval, ch, 0, 127);
+m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, it->second, val));
+}}
 } catch (std::exception& ex) {
 throw syntax_error(ex.what(), e.begin);
 }}//end MT_CMD loop

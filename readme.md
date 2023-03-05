@@ -73,7 +73,7 @@ Examples:
 
 - `C4` is a simple C full note
 - `1e/4` is a E one octave above the current octave and is a 16th note
-`-1B_/` is an eighth note flat B, one octave below the current octave
+- `-1B_/` is an eighth note flat B, one octave below the current octave
 - `c2d2e2` are three half notes C, D and E played one after the other
 - `d4&f#4&a4` is a D major chord
 
@@ -105,7 +105,7 @@ Some command lettters have a different signification when a value/length is spec
 - R: negative/backward silence/rest
 - S: negative/backward silence/rest
 - T: unused
-- U: unused
+- U: sostenuto pedal off (MIDI controller 66)
 - V: set channel volume (MIDI controller 7) (0-127)
 - W: modulation wheel range (MIDI RPN 5) (0-16383)
 - X: unused
@@ -133,6 +133,7 @@ Some command lettters have a different signification when a value/length is spec
 - s: silence/rest
 - t: set tempo (BPM) (10-1000)
 - u: set channel pressure (0-127)
+- u: sostenuto pedal on (when used without parameter) (MIDI controller 66)
 - v: set note velocity (0-127)
 - w: set modulation wheel value (MIDI controller 1) (0-127)
 - x: set expression (MIDI controller 11) (0-127)
@@ -177,7 +178,8 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 - aftertouchdest(t,x).: Aftertouch destination effect (see GM2 doc). t=type (pitch|volume|vibrato|filter), x=value (0-127)
 - crX(start,end,duration).: slide the specified value from start to end across duration. X is to be replaced with the value that has to be slide: d=last RPN/NRPN, h=pitch bend, n=panning, u=channel pressure, v=channel volume, w=modulation wheel, x=expression
 - crX(param,start,end,duration).: some slides need an additional parameter. c=custom MIDI controller (param=controller number), k=key polypressure/aftertouch (param=key note)
-- ctrl(controller,value).: custom control change (controller 0-127, value 0-127)
+- ctrl(controller,value).: custom control change (controller 0-127 or controller name, value 0-127)
+- controllerName(value)): control change, where controllerName is a controller name (see below), and value 0-127
 - echo(time,volume,count,dest,octave).: following notes are echoed. time=length of the echo (a duration specifier like /2), volume=volume of the echo in percentages (1-99), count=optional number of echoes (1-99, default=3), dest=optional destination channel (0-15, default=current), octave=optional relative octave change (-10-10, default=0)
 - echo:off.: turn a preceeding echo setting off
 - maxnotelength: see m in short commands. Kept for backward compatibility with MidiText v3 and v4.
@@ -188,6 +190,30 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 - rpn(controllerMSB,controllerLSB,valueMSB,valueLSB).: RPN control change (see MIDI spec)
 - sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int)
 - transpose(n).: transpose all notes except drums; n=semitones (-60-60)
+
+Controller names for ctrl and controlName(value) commands:
+
+- vibrato, modulation, vib, mod  (1)
+- portatime, portamentotime  (5)
+- volume, vol (7)
+- pan, panning  (10)
+- expression, expr  (11)
+- sustain, hold, pedal (64)
+- portamento, porta (65)
+- sostenuto (66)
+- soft (67)
+- resonnance, filterq (71)
+- release (72)
+- attack (73)
+- brightness, filtercutoff (74)
+- decay (75)
+- vibratorate (76)
+- vibratodepth (77)
+- vibratodelay (78)
+- portanote, portamentonote (84)
+- reverb (91)
+- chorus (93)
+
 
 ## Repeatition and bar commands
 
@@ -211,7 +237,8 @@ You can use variables where integers are expected, for example: `v$x` sets the n
 # Configuration MidiText.ini
 - bassUpdatePeriod=ms: BASS Update period, default: 20ms. Shorter update period means more CPU usage.
 - bassBufferLength=ms: BASS buffer length, default: 60ms. Shorter buffer means more responsiveness, but more CPU usage; longer buffer means more lag, but less CPU usage. Must be approx. at least 1.5 times greater than bassUpdatePeriod.
-- font=file [srcBank srcPreset dstBank [dstPreset [dstBankLSB]]].: declare the soundfont(s) to use. file=a .sf2 file, srcBank/Preset=banks/presets to use from the soundfont (-1=all), dstBank/Preset/BankLSB=Bank and preset on which selected instruments are mapped in MIDI files (if srcBank/Preset are set to -1, dstPreset should be also set to -1 and dstBank specifies a bank offset). If all parameters are omited, defaults are -1 -1 0 -1 0.
+- fontX=file, name: load a soundfont, where X is font index, file is SF2/SF3/SFZ file, name is a name to use in mappings
+- fontmapX=name, srcBank, srcPreset, dstBank, dstPreset, dstBankLSB: create a soundfont mapping: name=name of the font (not filename), srcBank/Preset=banks/presets to use from the soundfont (-1=all), dstBank/Preset/BankLSB=Bank and preset on which selected instruments are mapped in MIDI files (if srcBank/Preset are set to -1, dstPreset should be also set to -1 and dstBank specifies a bank offset). If all parameters are omited, defaults are -1 -1 0 -1 0.
 
 # Keyboard shortcuts
 ## General keyboard shortcuts - always available
