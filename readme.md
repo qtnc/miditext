@@ -179,7 +179,8 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 - crX(start,end,duration).: slide the specified value from start to end across duration. X is to be replaced with the value that has to be slide: d=last RPN/NRPN, h=pitch bend, n=panning, u=channel pressure, v=channel volume, w=modulation wheel, x=expression
 - crX(param,start,end,duration).: some slides need an additional parameter. c=custom MIDI controller (param=controller number), k=key polypressure/aftertouch (param=key note)
 - ctrl(controller,value).: custom control change (controller 0-127 or controller name, value 0-127)
-- controllerName(value)): control change, where controllerName is a controller name (see below), and value 0-127
+- controllerName(value)): control change, where controllerName is a controller value or name (see below), and value 0-127
+- slide(controllerName, start, end, duration): slide the specified value from start to end across duration. ControllerName is a controller value or name (see below), or one of pitch, pressure or aftertouch.
 - echo(time,volume,count,dest,octave).: following notes are echoed. time=length of the echo (a duration specifier like /2), volume=volume of the echo in percentages (1-99), count=optional number of echoes (1-99, default=3), dest=optional destination channel (0-15, default=current), octave=optional relative octave change (-10-10, default=0)
 - echo:off.: turn a preceeding echo setting off
 - maxnotelength: see m in short commands. Kept for backward compatibility with MidiText v3 and v4.
@@ -191,17 +192,20 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 - sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int)
 - transpose(n).: transpose all notes except drums; n=semitones (-60-60)
 
-Controller names for ctrl and controlName(value) commands:
+Controller names for ctrl, crc, slide,  or controlName(value) commands:
 
 - vibrato, modulation, vib, mod  (1)
+- breath (2)
 - portatime, portamentotime  (5)
 - volume, vol (7)
 - pan, panning  (10)
 - expression, expr  (11)
-- sustain, hold, pedal (64)
+- sustain, pedal, hold, hold1 (64)
 - portamento, porta (65)
 - sostenuto (66)
 - soft (67)
+- legato (68)
+- hold2 (69)
 - resonnance, filterq (71)
 - release (72)
 - attack (73)
@@ -213,7 +217,6 @@ Controller names for ctrl and controlName(value) commands:
 - portanote, portamentonote (84)
 - reverb (91)
 - chorus (93)
-
 
 ## Repeatition and bar commands
 

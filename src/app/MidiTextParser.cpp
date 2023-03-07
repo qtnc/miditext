@@ -57,14 +57,18 @@ static unordered_map<char,int> NOTES = {
 static unordered_map<std::string, int> CTRL_NAMES = {
 { "vib", 1 }, { "vibrato", 1 },
 { "mod", 1 }, { "modulation", 1 },
+{ "breath", 2 },
 { "portatime", 5 }, { "portamentotime", 5 },
 { "volume", 7 }, { "vol", 7 },
+{ "balance", 8 },
 { "pan", 10 }, { "panning", 10 },
 { "expression", 11 }, { "expr", 11 },
-{ "sustain", 64 }, { "hold", 64 }, { "pedal", 64 },
+{ "sustain", 64 }, { "hold", 64 }, { "pedal", 64 }, { "hold1", 64 },
 { "portamento", 65 }, { "porta", 65 },
 { "sostenuto", 66 },
 { "soft", 67 },
+{ "legato", 68 },
+{ "hold2", 69 },
 { "resonnance", 71 }, { "filterq", 71 }, 
 { "release", 72 },
 { "attack", 73 },
@@ -73,12 +77,13 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 { "vibratorate", 76 },
 { "vibratodepth", 77 },
 { "vibratodelay", 78 },
+{ "portanote", 84 }, { "portamentonote", 84 },
 { "reverb", 91 },
 { "chorus", 93 }
 };
 
 static lua_State* L = NULL;
-static const string ALTER_P1 = "#+^'>", ALTER_M1 = "_-<,";
+static const string ALTER_P1 = "#+^'", ALTER_M1 = "_-,";
 
 static inline string sub (const tsub_match& p) {
 return string(p.first, p.second);
@@ -92,7 +97,7 @@ return it==vals.end()? def : it-vals.begin();
 void MTTranspose (string& text, int count) {
 lua_State* L = 0;
 if (!L) {
-L = lua_open();
+L = luaL_newstate();
 luaL_openlibs(L);
 luaL_dofile(L, "transpose.lua");
 }
@@ -107,7 +112,7 @@ lua_settop(L,0);
 
 static void compile1 (const string& str0, vector<MT_CMD>& mtcmds) {
 const auto options = regex_constants::perl | regex_constants::mod_s |  regex_constants::collate;
-const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'\\w\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\})|(?'oct'-?\\d?)(?'cmd'[a-zA-Z])(?'alter'[-+=#_^]?)(?'val'\\d*(?:/\\d*)?\\*?)(?'var'(?:\\$[\\w\\d]+)?)|(?'cmd'[][(){}+*%,;:.!?<|&=>/^~#@_-]+)(?'val'\\d*))";
+const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'\\w\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\})|(?'oct'-?\\d?)(?'cmd'[a-zA-Z])(?'alter'[-+=#_]?)(?'val'\\d*(?:/\\d*)?\\*?)(?'var'(?:\\$[\\w\\d]+)?)|(?'cmd'[][(){}+*%,;:.!?<|&=>/^~#@_-]+)(?'val'\\d*))";
 const string reg0t = "^[/#;][^\r\n]*$";
 string str = str0;
 auto strBegin = str.data(), strEnd = str.data()+str.size(), finish=strBegin;
@@ -145,7 +150,7 @@ if (m>=e.begin) out=i;
 static inline string GetVariable (MT_CHAN& ch, const string& name) {
 if (L) {
 lua_settop(L,0);
-lua_getfield(L, LUA_GLOBALSINDEX, (name).c_str() );
+lua_getglobal(L, (name).c_str() );
 if (!lua_isnoneornil(L,-1)) return (lua_tostring(L,-1));
 }
 throw logic_error("Undefined variable");
@@ -213,8 +218,14 @@ if (str.empty()) {
 if (raise) throw range_error("A value must be specified");
 else return def;
 }
-int val = stoi(str);
-if (val>max || val<min) if (raise) throw range_error("Value out of bounds");
+int val;
+try {
+val = stoi(str);
+} catch (std::exception& e) {
+if (raise) throw;
+else return def;
+}
+if ((val>max || val<min)  && raise) throw range_error("Value out of bounds");
 return std::min(std::max(min, val), max);
 }
 
@@ -226,6 +237,16 @@ else return ParseSimpleInt(str, min, max, def, raise);
 
 static inline int ParseSimpleInt (const MT_CMD& e, MT_CHAN& ch, int min, int max, int def=-1, bool raise=true) {
 return ParseSimpleInt(e.val.empty()? e.var : e.val, ch, min, max, def, raise);
+}
+
+static int ParseControllerIdOrName (const std::string& str, MT_CHAN& ch) {
+int ctrl = ParseSimpleInt(str, ch, 0, 127, -1, false);
+if (ctrl<0 || ctrl>127) {
+auto it = CTRL_NAMES.find(str);
+if (it==CTRL_NAMES.end()) throw logic_error("Unknown command");
+ctrl = it->second;
+}
+return ctrl;
 }
 
 static void ParseIntOrStringAndAppend (vector<unsigned char>& out, MT_CHAN& ch, string& s) {
@@ -332,7 +353,7 @@ vector<MT_CHAN> chans(16);
 chans[9].drum=true;
 int curChan=0;
 int markResult1=0, markResult2=0;
-L = lua_open();
+L = luaL_newstate();
 luaL_openlibs(L);
 lua_pushinteger(L, curChan);
 lua_setglobal(L,"channel");
@@ -510,15 +531,28 @@ default: throw logic_error("Unknown command");
 }//switch long command
 else if (e.cmd==("ctrl")) {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
-int ctrl = ParseSimpleInt(v[0], ch, 0, 127, -1, false);
+int ctrl = ParseControllerIdOrName(v[0], ch);
 int val = ParseSimpleInt(v[1], ch, 0, 127);
-if (ctrl<0) {
-auto it = CTRL_NAMES.find(v[0]);
-if (it==CTRL_NAMES.end()) throw logic_error("Unknown command");
-ctrl = it->second;
-}
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, ctrl, val));
 }
+else if (e.cmd=="slide") {
+vector<string> v = SplitLongValue(e,ch, 4, 5);
+int ctrl, k;
+if (v[0]=="pitch" || v[0]=="pitchbend") ctrl = -1;
+else if (v[0]=="pressure" || v[0]=="channelpressure") ctrl = -2;
+else if (v[0]=="aftertouch" || v[0]=="polypressure") { ctrl=-3; k=ParseSimpleInt(v[1], ch, 0, 127); }
+else ctrl = ParseControllerIdOrName(v[0], ch);
+int lim = ctrl==-1? 16383 : 127,
+min = ParseSimpleInt(v[v.size() -3], ch, 0, lim),
+max = ParseSimpleInt(v[v.size() -2], ch, 0, lim),
+dur = ParseDuration(v[v.size() -1], ch, ch.multiplier);
+switch(ctrl){
+case 0 ... 127: AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); break;
+case -1: AddSlide(m.events, ch.pos, dur, 0xE0 + curChan, 0, 0, min, max, &MidiEvent::data1); break;
+case -2: AddSlide(m.events, ch.pos, dur, 0xD0 + curChan, 0, 0, min, max, &MidiEvent::data1); break; break;
+case -3: AddSlide(m.events, ch.pos, dur, 0xA0 + curChan, k, 0, min, max, &MidiEvent::data2); break;
+default: throw logic_error("Unknown command");
+}}
 else if (e.cmd==("rpn")) {
 vector<string> v = SplitLongValue(e,ch, 3, 4);
 int chsb = ParseSimpleInt(v[0], ch, 0, 127), clsb = ParseSimpleInt(v[1], ch, 0, 127),
@@ -531,7 +565,7 @@ m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 38, vlsb));
 else if (e.cmd==("nrpn")) {
 vector<string> v = SplitLongValue(e,ch, 3, 4);
 int chsb = ParseSimpleInt(v[0], ch, 0, 127), clsb = ParseSimpleInt(v[1], ch, 0, 127),
-vhsb = ParseSimpleInt(v[2], ch, 0, 127), vlsb = v.size()>=4? ParseSimpleInt(v[3], ch, 0, 127) :0;
+vhsb = ParseSimpleInt(v[2], ch, 0, 127), vlsb = v.size()>=4? ParseSimpleInt(v[3], ch, 0, 127) :vhsb;
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 99, chsb));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 98, clsb));
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6, vhsb));
@@ -603,20 +637,24 @@ mark.count++;
 }
 else if (istarts_with(e.cmd, ("cr")) && e.cmd.size()==3) {
 vector<string> v = SplitLongValue(e,ch, 3, 4);
-int lim = e.cmd[2]=='h' || e.cmd[2]=='b'? 16383 : 127,
+int ctrl, lim = e.cmd[2]=='h' || e.cmd[2]=='b'? 16383 : 127,
 min = ParseSimpleInt(v[v.size() -3], ch, 0, lim),
 max = ParseSimpleInt(v[v.size() -2], ch, 0, lim),
-ctrl = ParseSimpleInt(v[0], ch, 0, lim),
 dur = ParseDuration(v[v.size() -1], ch, ch.multiplier);
 switch(e.cmd[2]) {
-case 'v': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 7, 0, min, max, &MidiEvent::data2); break;
+case 'v': case 'V': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 7, 0, min, max, &MidiEvent::data2); break;
 case 'n': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 10, 0, min, max, &MidiEvent::data2); break;
 case 'x': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 11, 0, min, max, &MidiEvent::data2); break;
 case 'w': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 1, 0, min, max, &MidiEvent::data2); break;
 case 'd': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 6, 0, min, max, &MidiEvent::data2); break;
-case 'b': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, 104, 0, min>>7, max>>7, &MidiEvent::data2); break;
-case 'c': AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); break;
-case 'k': AddSlide(m.events, ch.pos, dur, 0xA0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); break;
+case 'c': 
+ctrl = ParseControllerIdOrName(v[0], ch);
+AddSlide(m.events, ch.pos, dur, 0xB0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); 
+break;
+case 'k': case 'A': 
+ctrl = ParseSimpleInt(v[0], ch, 0, 127);
+AddSlide(m.events, ch.pos, dur, 0xA0 + curChan, ctrl, 0, min, max, &MidiEvent::data2); 
+break;
 case 'h': AddSlide(m.events, ch.pos, dur, 0xE0 + curChan, 0, 0, min, max, &MidiEvent::data1); break;
 case 'u': AddSlide(m.events, ch.pos, dur, 0xD0 + curChan, 0, 0, min, max, &MidiEvent::data1); break;
 default: throw logic_error("Unknown command");
@@ -624,13 +662,13 @@ default: throw logic_error("Unknown command");
 else if (starts_with(e.cmd, ("$"))) SetVariable(ch, e.cmd.substr(1), trim_copy(e.longval));
 else {
 auto it = CTRL_NAMES.find(e.cmd);
-if (it!=CTRL_NAMES.end()) {
+if (it==CTRL_NAMES.end()) throw logic_error("Unknown command");
 int val;
 if (e.longval=="on") val=127;
 else if (e.longval=="off") val=0;
 else val = ParseSimpleInt(e.longval, ch, 0, 127);
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, it->second, val));
-}}
+}
 } catch (std::exception& ex) {
 throw syntax_error(ex.what(), e.begin);
 }}//end MT_CMD loop

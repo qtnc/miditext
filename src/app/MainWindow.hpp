@@ -43,6 +43,7 @@ void OnPlayPause (wxCommandEvent& e) { OnPlayPause(); }
 void OnPlayFromCursor ();
 void OnPlayFromCursor (wxCommandEvent& e) { OnPlayFromCursor(); }
 void showInstrumentDialog ();
+void TransposeSelection (int n);
 
 void OnOpenFileDlg ();
 void OnOpenFileDlg (wxCommandEvent& e) { OnOpenFileDlg(); }

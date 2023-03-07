@@ -274,8 +274,8 @@ BASS_ChannelSetPosition(curStream, BASS_ChannelSeconds2Bytes(curStream, time), B
 }
 
 void App::changeVol (float value, bool abs) {
-if (!abs) streamVol += value;
-streamVol = std::max(0.01f, std::min(streamVol, 1.0f));
+if (!abs) value += streamVol;
+streamVol = std::max(0.01f, std::min(value, 1.0f));
 if (curStream) BASS_ChannelSetAttribute(curStream, BASS_ATTRIB_VOL, streamVol);
 }
 
