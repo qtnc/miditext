@@ -28,7 +28,9 @@ using namespace std;
 
 extern void encAddAll ();
 extern DWORD CompileMidiAsStream (const string& code, DWORD flags=0, int* mark1=0, int* mark2=0);
+void ConvertFromV3 (MainWindow*);
 void MTTranspose (std::string& text, int count);
+void MTConvertFromV3 (std::string& text);
 
 MainWindow::MainWindow (App& app):
 wxFrame(nullptr, wxID_ANY,
@@ -63,6 +65,7 @@ editMenu->Append(wxID_CUT, U(translate("Cut")));
 editMenu->Append(wxID_PASTE, U(translate("Paste")));
 editMenu->Append(IDM_TRANSPOSE_UP, U(translate("TransposeUp")));
 editMenu->Append(IDM_TRANSPOSE_DOWN, U(translate("TransposeDown")));
+editMenu->Append(IDM_CONVERT_FROM_V3, U(translate("ConvertFromV3")));
 editMenu->Append(IDM_FIND, U(translate("Find")));
 editMenu->Append(IDM_FIND_REPLACE, U(translate("FindReplace")));
 editMenu->Append(IDM_FIND_NEXT, U(translate("FindNext")));
@@ -105,6 +108,7 @@ Bind(wxEVT_MENU, [&](auto&e){ app.changeVol(-0.02f); }, IDM_VOLUME_DOWN);
 Bind(wxEVT_MENU, [&](auto&e){ app.changeVol(0.02f); }, IDM_VOLUME_UP);
 Bind(wxEVT_MENU, [this](auto&e){ TransposeSelection(1); }, IDM_TRANSPOSE_UP);
 Bind(wxEVT_MENU, [this](auto&e){ TransposeSelection(-1); }, IDM_TRANSPOSE_DOWN);
+Bind(wxEVT_MENU, [this](auto&e){ ConvertFromV3(this);  }, IDM_CONVERT_FROM_V3);
 Bind(wxEVT_MENU, [&](auto&e){ showInstrumentDialog(); }, IDM_SELINST);
 Bind(wxEVT_MENU, &MainWindow::OnFind, this, IDM_FIND);
 Bind(wxEVT_MENU, &MainWindow::OnFindNext, this, IDM_FIND_NEXT);
@@ -391,6 +395,12 @@ slPreviewPosition->SetPageSize(30);
 slPreviewPosition->SetValue(secPos);
 }
 }}
+
+void ConvertFromV3 (MainWindow* win) {
+std::string s = U(win->textArea->GetValue());
+MTConvertFromV3(s);
+win->textArea->SetValue(s);
+}
 
 void MainWindow::TransposeSelection (int n) {
 long start, end;

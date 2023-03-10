@@ -95,19 +95,28 @@ return it==vals.end()? def : it-vals.begin();
 }
 
 void MTTranspose (string& text, int count) {
-lua_State* L = 0;
-if (!L) {
-L = luaL_newstate();
+lua_State* L = luaL_newstate();
 luaL_openlibs(L);
-luaL_dofile(L, "transpose.lua");
-}
+luaL_loadfilex(L, "transpose.lua", NULL) || lua_pcall(L, 0, LUA_MULTRET, 0);
 lua_settop(L,0);
 lua_getglobal(L, "transpose");
 lua_pushstring(L, text.c_str()) ;
 lua_pushinteger(L, count);
 lua_call(L, 2, 1);
 text = lua_tostring(L,-1);
+lua_close(L);
+}
+
+void MTConvertFromV3 (string& text) {
+lua_State* L = luaL_newstate();
+luaL_openlibs(L);
+luaL_loadfilex(L, "convertFromV3.lua", NULL) || lua_pcall(L, 0, LUA_MULTRET, 0);
 lua_settop(L,0);
+lua_getglobal(L, "convertFromV3");
+lua_pushstring(L, text.c_str()) ;
+lua_call(L, 1, 1);
+text = lua_tostring(L,-1);
+lua_close(L);
 }
 
 static void compile1 (const string& str0, vector<MT_CMD>& mtcmds) {
@@ -482,11 +491,11 @@ ch.repeatStack.emplace_back( 1, i);
 break;
 case '|': if (!e.val.empty()) {
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
-int count = ParseSimpleInt(e, ch, 1, 9);
+int count = ParseSimpleInt(e, ch, 1, 999);
 mark.marks[count] = i;
-if (mark.count!=count) {
-auto it = mark.marks.find(mark.count);
-i = it!=mark.marks.end()? it->second : mark.start;
+for (int j=mark.count; j>0; j--) {
+auto it = mark.marks.find(j);
+if (it!=mark.marks.end()) { i = it->second; break; }
 }}break;
 case ')': {
 int count = ParseSimpleInt(e, ch, 2, 1<<30);
@@ -628,7 +637,7 @@ else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval
 else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) ch.repeatStack.pop_back();
 else if (e.cmd==("|:")) ch.repeatStack.emplace_back( 1, i );
 else if (e.cmd==(":|")) {
-int count = ParseSimpleInt(e, ch, 2, 9);
+int count = ParseSimpleInt(e, ch, 2, 999);
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
 if (mark.count==count) continue;
 mark.marks[count] = i;
