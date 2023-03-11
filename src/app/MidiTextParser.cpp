@@ -365,8 +365,8 @@ lua_setglobal(L, "note");
 lua_pushinteger(L, velocity);
 lua_setglobal(L, "velocity");
 SetVariable(L, "duration", format("'{}/{}'", duration, ch.multiplier));
-std::vector<std::pair<int,int>> marks;
-CompileCommands(ch.onNoteOn, m, chans, L, chIndex, marks);
+std::vector<std::pair<int,int>> unusedMarks;
+CompileCommands(ch.onNoteOn, m, chans, L, chIndex, unusedMarks);
 }
 ch.prevPos = ch.pos;
 ch.pos += increment;
@@ -533,7 +533,7 @@ break;
 case '|': 
 if (!IsEmptyValue(e)) {
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
-int count = ParseInt(L, e, ch, 1, 999);
+int count = ParseInt(L, e, ch, 1, 1000000);
 mark.marks[count] = i;
 for (int j=mark.count; j>0; j--) {
 auto it = mark.marks.find(j);
@@ -781,7 +781,7 @@ lua_close(L);
 L=NULL;
 }
 
-MidiFile CompileMidi (const string& text, std::vector<std::pair<int,int>> marks) {
+MidiFile CompileMidi (const string& text, std::vector<std::pair<int,int>>& marks) {
 vector<MT_CMD> cmds;
 MidiFile mf;
 mf.setCodeText(text);
