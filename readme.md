@@ -91,22 +91,22 @@ Some command lettters have a different signification when a value/length is spec
 - E: lower note E
 - F: lower note F
 - G: lower note G
-- H: pitch bend sensitivity, in cents (MIDI RPN 0) (1-12700)
+- H: pitch bend sensitivity, in semitones (MIDI RPN 0) (1-127)
 - I: unused
-- J: portamento start note (0-127) (MIDI controller 84)
-- J: portamento switch off (when no value specified) (MIDI controller 65)
-- K: sustain pedal off (MIDI controller 64)
+- J: portamento start note (0-127) (CC84)
+- J: portamento switch off (when no value specified) (CC65)
+- K: sustain pedal off (CC64)
 - L: default note length / note duration multiplier
 - M: unused
 - N: unused
 - O: unused
 - P: absolute time positionning from the beginning of the song
-- Q: quiet/soft pedal off (MIDI controller 67)
+- Q: quiet/soft pedal off (CC67)
 - R: negative/backward silence/rest
 - S: negative/backward silence/rest
 - T: unused
-- U: sostenuto pedal off (MIDI controller 66)
-- V: set channel volume (MIDI controller 7) (0-127)
+- U: sostenuto pedal off (CC66)
+- V: set channel volume (CC7) (0-127)
 - W: modulation wheel range (MIDI RPN 5) (0-16383)
 - X: unused
 - Y: unused
@@ -120,23 +120,23 @@ Some command lettters have a different signification when a value/length is spec
 - g: higher note G
 - h: set pitch bend value (0-16383)
 - i: set instrument / program change (0-2097151)
-- j: portamento time (0-127) (MIDI controller 5)
-- j: portamento switch on (when no value specified) (MIDI controller 65)
-- k: sustain pedal on (MIDI controller 64)
+- j: portamento time (0-127) (CC5)
+- j: portamento switch on (when no value specified) (CC65)
+- k: sustain pedal on (CC64)
 - l: default note length / note duration multiplier
 - m: set maximum note on length
-- n: set panning (MIDI controller 10) (0-127)
+- n: set panning (CC10) (0-127)
 - o: absolute octave change (0-10)
 - p: set instrument / program change (0-2097151)
-- q: quiet/soft pedal on (MIDI controller 67)
+- q: quiet/soft pedal on (CC67)
 - r: silence/rest
 - s: silence/rest
 - t: set tempo (BPM) (10-1000)
 - u: set channel pressure (0-127)
-- u: sostenuto pedal on (when used without parameter) (MIDI controller 66)
+- u: sostenuto pedal on (when used without parameter) (CC66)
 - v: set note velocity (0-127)
-- w: set modulation wheel value (MIDI controller 1) (0-127)
-- x: set expression (MIDI controller 11) (0-127)
+- w: set modulation wheel value (CC1) (0-127)
+- x: set expression (CC11) (0-127)
 - y: unused
 - z: silence/rest
 - `&`: chord separator
@@ -177,46 +177,66 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 ## Elaborate commands
 - aftertouchdest(t,x).: Aftertouch destination effect (see GM2 doc). t=type (pitch|volume|vibrato|filter), x=value (0-127)
 - crX(start,end,duration).: slide the specified value from start to end across duration. X is to be replaced with the value that has to be slide: d=last RPN/NRPN, h=pitch bend, n=panning, u=channel pressure, v=channel volume, w=modulation wheel, x=expression
-- crX(param,start,end,duration).: some slides need an additional parameter. c=custom MIDI controller (param=controller number), k=key polypressure/aftertouch (param=key note)
-- ctrl(controller,value).: custom control change (controller 0-127 or controller name, value 0-127)
-- controllerName(value)): control change, where controllerName is a controller value or name (see below), and value 0-127
-- slide(controllerName, start, end, duration): slide the specified value from start to end across duration. ControllerName is a controller value or name (see below), or one of pitch, pressure or aftertouch.
+- crX(param,start,end,duration).: some slides need an additional parameter. c=custom CC(param=CC number), k=key polypressure/aftertouch (param=key note)
+- ctrl(controller,value).: custom control change (CC number 0-127 or CC name, value 0-127)
+- controllerName(value)): control change, where controllerName is a CC name (see below), and value 0-127
+- slide(controllerName, start, end, duration): slide the specified value from start to end across duration. ControllerName is a CC number or name (see below), or one of pitch, pressure or aftertouch.
 - echo(time,volume,count,dest,octave).: following notes are echoed. time=length of the echo (a duration specifier like /2), volume=volume of the echo in percentages (1-99), count=optional number of echoes (1-99, default=3), dest=optional destination channel (0-15, default=current), octave=optional relative octave change (-10-10, default=0)
 - echo:off.: turn a preceeding echo setting off
-- maxnotelength: see m in short commands. Kept for backward compatibility with MidiText v3 and v4.
 - meta(type,values...).: Send a custom MIDI meta message. type=0-127, values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int)
-- mult: see l in short commands. Kept for backward compatibility with MidiText v3 and v4.
+- note(key,velocity,duration): play specified note (this command can be useful for scripts). Velocity is optional and takes the current channel velocity if omited.
 - nrpn(controllerMSB,controllerLSB,valueMSB,valueLSB).: NRPN control change (see MIDI spec)
+- onnoteon{...}: a serie of command that have to be executed each time a note is played. IN the enclosed code, variables $note, $velocity, $duration and $channel are defined. Be aware that there is no protection against infinite loops, so don't put note commands in there !
 - pressuredest(t,x).: channel pressure destination effect (see GM2 doc). t=type (pitch|volume|vibrato|filter), x=value (0-127)
 - rpn(controllerMSB,controllerLSB,valueMSB,valueLSB).: RPN control change (see MIDI spec)
-- sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int)
-- transpose(n).: transpose all notes except drums; n=semitones (-60-60)
+- sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int). Terminating 0xF7 is automatically added.
+- transpose(n).: transpose all notes except drums; n=semitones (+-108)
 
-Controller names for ctrl, crc, slide,  or controlName(value) commands:
+CC names for ctrl, crc, slide,  and controlName(value) commands:
 
+- bank, bankmsb (0)
 - vibrato, modulation, vib, mod  (1)
 - breath (2)
+- foot (4)
 - portatime, portamentotime  (5)
+- data, datamsb (6)
 - volume, vol (7)
+- balance (8)
 - pan, panning  (10)
 - expression, expr  (11)
+- banklsb (32)
+- datalsb (38)
 - sustain, pedal, hold, hold1 (64)
 - portamento, porta (65)
 - sostenuto (66)
 - soft (67)
 - legato (68)
 - hold2 (69)
-- resonnance, filterq (71)
+- resonnance, filterq, timbre (71)
 - release (72)
 - attack (73)
 - brightness, filtercutoff (74)
 - decay (75)
-- vibratorate (76)
-- vibratodepth (77)
-- vibratodelay (78)
+- vibratorate, vibratospeed, vibspeed  (76)
+- vibratodepth, vibdepth  (77)
+- vibratodelay, vibdelay (78)
 - portanote, portamentonote (84)
 - reverb (91)
+- tremolo (92)
 - chorus (93)
+- userfx, detune (94)
+- phaser (95)
+- dataincrement, datainc (96)
+- datadecrement, datadec (97)
+- nrpnlsb (98)
+- nrpnmsb (99)
+- rpnlsb (100)
+- rpnmsb (101)
+- allsoundsoff (120)
+- reset (121)
+- allnotesoff (123)
+- monophonic (126)
+- polyphonic (127)
 
 ## Repeatition and bar commands
 

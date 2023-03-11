@@ -27,7 +27,7 @@
 using namespace std;
 
 extern void encAddAll ();
-extern DWORD CompileMidiAsStream (const string& code, DWORD flags=0, int* mark1=0, int* mark2=0);
+extern DWORD CompileMidiAsStream (const string& code, DWORD flags, std::vector<std::pair<int,int>>& marks);
 void ConvertFromV3 (MainWindow*);
 void MTTranspose (std::string& text, int count);
 void MTConvertFromV3 (std::string& text);
@@ -349,8 +349,9 @@ int selStart, selEnd;
 string code = U(textArea->GetValue());
 textArea->GetSelection( reinterpret_cast<long*>(&selStart), reinterpret_cast<long*>(&selEnd));
 app.stopPlayback();
+std::vector<std::pair<int,int>> marks = { { selStart, 0 }, { selEnd, 0 } };
 try {
-app.curStream = CompileMidiAsStream(code, BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT | (app.loop? BASS_SAMPLE_LOOP : 0), &selStart, &selEnd);
+app.curStream = CompileMidiAsStream(code, BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT | (app.loop? BASS_SAMPLE_LOOP : 0), marks);
 BASS_ChannelSetAttribute(app.curStream, BASS_ATTRIB_VOL, app.streamVol);
 } catch (syntax_error& e) {
 string msg = e.what();
@@ -358,12 +359,12 @@ wxMessageBox(U(msg), U(translate("Error")), wxICON_ERROR | wxOK);
 textArea->SetInsertionPoint(e.offset);
 return;
 }
-if (selStart>=0) BASS_ChannelSetPosition(app.curStream, selStart, BASS_POS_MIDI_TICK);
-if (selStart>=0 && selEnd>0 && selStart!=selEnd) {
-BASS_ChannelSetPosition(app.curStream, selEnd, BASS_POS_MIDI_TICK);
+if (marks[0].second>=0) BASS_ChannelSetPosition(app.curStream, marks[0].second, BASS_POS_MIDI_TICK);
+if (marks[0].second>=0 && marks[1].second>0 && marks[0].second!=marks[1].second) {
+BASS_ChannelSetPosition(app.curStream, marks[1].second, BASS_POS_MIDI_TICK);
 auto endPos = BASS_ChannelGetPosition(app.curStream, BASS_POS_BYTE);
 BASS_ChannelSetPosition(app.curStream, endPos, BASS_POS_END);
-BASS_ChannelSetPosition(app.curStream, selStart, BASS_POS_MIDI_TICK);
+BASS_ChannelSetPosition(app.curStream, marks[0].second, BASS_POS_MIDI_TICK);
 auto startPos = BASS_ChannelGetPosition(app.curStream, BASS_POS_BYTE);
 BASS_ChannelSetPosition(app.curStream, startPos, BASS_POS_LOOP);
 }

@@ -35,8 +35,8 @@ extern DWORD BASS_StreamCreateCopy (DWORD source, bool decode=true);
 extern vector<pair<int,string>> BASS_GetDeviceList (bool includeLoopback = false);
 extern vector<pair<int,string>> BASS_RecordGetDeviceList (bool includeLoopback = false);
 
-extern MidiFile CompileMidi (const std::string& code, int* mark1=nullptr, int* mark2=nullptr);
-extern DWORD CompileMidiAsStream (const string& code, DWORD flags=0, int* mark1=0, int* mark2=0);
+extern MidiFile CompileMidi (const std::string& code);
+extern DWORD CompileMidiAsStream (const string& code, DWORD flags=0);
 
 struct CustomFileTranslationLoader: wxTranslationsLoader {
 virtual wxMsgCatalog* LoadCatalog (const wxString& domain, const wxString& lang) final override {

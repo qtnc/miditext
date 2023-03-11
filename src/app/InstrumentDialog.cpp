@@ -8,7 +8,7 @@
 #include "../common/bassmidi.h"
 using namespace std;
 
-extern DWORD CompileMidiAsStream (const string& code, DWORD flags=0, int* mark1=0, int* mark2=0);
+extern DWORD CompileMidiAsStream (const string& code, DWORD flags);
 
 std::string 
 InstrumentDialog::testCode = "c4",
