@@ -8,12 +8,13 @@ or
 though quite different, with the goal to give access to more specific MIDI features.
 
 
-IF you already have used ABC or MML music notation, the commands are similar in the principle, but only in the principle. The syntax differs quite a lot.
+IF you already have used [ABC](https://www.abcnotation.com/) or MML music notation, the commands are similar in the principle, but only in the principle. The syntax differs quite a lot.
 
-- The goal of ABC is to stay rather simple, but still look like real musical scores as far as it's possible with ASCII. 
+- The main goal of ABC is to stay rather simple, but still look like real musical scores as far as it's possible with ASCII. 
 - MML is often quite software-specific or chip-specific, while MidiText is centered on general MIDI
 
 The result is that MidiText syntax much more ressemble programming than music notation or transcription of music scores, and allow much more control / direct access to MIDI specific features.
+I don't care at all about displaying music scores.
 First of all I'm a developer, and then only sometimes a musician; not the opposite.... sorry!
 
 Still, I hope that you will appreciate this software and produce beautiful music with it. Please contact me if you do !
@@ -36,7 +37,7 @@ You may want to download MidiText v5, last updated in 2016 under
 
 I discovered ABC notation and abc2midi program for the first time in 2003.
 Although it was cool, it was severly limited: it was difficult to create songs that went beyond a single track of piano or guitar.
-No drums, almost only a single instrument and that was it.
+Almost no drums, almost only a single instrument or maybe two and that was it.
 
 It was also very cool because traditional music creation software weren't accessible with screen readers. Well known titles like ableton, FL studio, lmms and all others are still almost totally unusable nowadays, and I think they probably won't ever be.
 We can, however, use Reaper. That's very nice.
@@ -52,7 +53,7 @@ However, except with a couple friends, I have never shared MidiText with the wor
 
 Now in 2023, I assume that's still mostly true. But why should I still keep that secret?
 There's no reason afterall. I won't ever make money or what with something like that anyway. So I finally decided to publish it. Maybe someone would eventually be interested? we never know.
-I'm porting all my old software to WXWidgets, so that's the occasion to finally do it, 20 years after the initial idea. It has well evolved since that time, though I haven't yet ported all the features of MidiText v5.
+I'm porting all my old software to WXWidgets, so that's the occasion to finally do it, 20 years after the initial idea. It has well evolved since that time, though I haven't yet ported all the features of MidiText v3, v4 and v5.
 MIDI text v5 can be downloaded from <http://demo.quentinc.net/Miditext/miditext500b.zip>
 
 # MidiText Syntax
@@ -61,7 +62,7 @@ Notes: optional octave + note letter + optional alteration + optional duration
 
 - Notes are indicated by a single letter A-G or a-g. Silences/rests are indicated by letters r, s or z.
 - A note can be preceeded by an octave deviation between -10 and 10. This octave number is relative to the current octave of the channel.
-- A note can be followed by an alteration: one of `#+^` for sharp, one of `-_` for flat, `=` for natural (does nothing)
+- A note can be followed by an alteration: one of `#+` for sharp, one of `-_` for flat
 - A note can be followed by its length/duration, by default when omited the duration is one  quarter note or the default note length if it has been specified
 - Duration is indicated as n/d, where n is the numerator and d the denominator. Both can be omited and if so, both are set to 1. 
 For example, if we assume that default note length is a quarter note, 2 would indicate an half note (2/1), and /2 whould indicate an eight note (1/2). / alone is a shorten for 1/2.
@@ -78,7 +79,7 @@ Examples:
 - `d4&f#4&a4` is a D major chord
 
 ## Short commands
-Short commands: optional octave + single command letter + optional alteration + optional value/duration
+Short commands: optional octave + single command letter + optional alteration + optional value or duration
 
 Short commands include notes (with letters A-G a-g), but also several other common command that are frequently used.
 The syntax is quite lenient: length, octave and alteration are always recognized, even with commands where they don't make sense.
@@ -144,7 +145,14 @@ Some command lettters have a different signification when a value/length is spec
 - `>`: octave up
 
 ## Long commands
-Long commands: command + ':' + value without spaces, or command + '(' + value + ')'
+Long commands: 
+
+- command + ':' + value without spaces
+- command + '(' + value + ')'
+- command + '{' + value + '}'
+- command + '[' + value + ']'
+
+Long commands are again identified by a single letter, but accept longer parameters than just a single value or a length.
 
 - A: key polyphonic aftertouch / key pressure `A:x,y` or `A(x,y)` where x=note, y=value (0-127)
 - B: unused
@@ -175,10 +183,12 @@ Long commands: command + ':' + value without spaces, or command + '(' + value + 
 - i or p: set instrument / program change, in separate bank/program parameters; p(b,n) or p(b,n) where b=bank number (0-16383) and n = instrument/program number (0-127). Also accepts p(x,y,z) where x=bankMSB (0-127), y=BankLSB (0-127), z=program (0-127)
 
 ## Elaborate commands
+Elaborate commands are like long commands, except that the command is a word rather than just a single letter. The syntax is the same.
+
 - aftertouchdest(t,x).: Aftertouch destination effect (see GM2 doc). t=type (pitch|volume|vibrato|filter), x=value (0-127)
 - crX(start,end,duration).: slide the specified value from start to end across duration. X is to be replaced with the value that has to be slide: d=last RPN/NRPN, h=pitch bend, n=panning, u=channel pressure, v=channel volume, w=modulation wheel, x=expression
 - crX(param,start,end,duration).: some slides need an additional parameter. c=custom CC(param=CC number), k=key polypressure/aftertouch (param=key note)
-- ctrl(controller,value).: custom control change (CC number 0-127 or CC name, value 0-127)
+- ctrl(cc,value).: custom control change (CC number 0-127 or CC name, value 0-127)
 - controllerName(value)): control change, where controllerName is a CC name (see below), and value 0-127
 - slide(controllerName, start, end, duration): slide the specified value from start to end across duration. ControllerName is a CC number or name (see below), or one of pitch, pressure or aftertouch.
 - echo(time,volume,count,dest,octave).: following notes are echoed. time=length of the echo (a duration specifier like /2), volume=volume of the echo in percentages (1-99), count=optional number of echoes (1-99, default=3), dest=optional destination channel (0-15, default=current), octave=optional relative octave change (-10-10, default=0)

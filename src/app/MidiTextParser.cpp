@@ -20,7 +20,7 @@ typedef boost::cmatch tcmatch;
 typedef boost::sub_match<const char*> tsub_match;
 
 struct MT_CMD {
-const string cmd, val, var, longval;
+const string cmd, val, var, longval, suffix;
 int oct, alter;
 int begin, end;
 };
@@ -106,7 +106,7 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 static const string ALTER_P1 = "#+^'", ALTER_M1 = "_-,";
 
 static const auto regoptions = regex_constants::perl | regex_constants::mod_s |  regex_constants::collate;
-static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\}|\\[(?'longval'[^][]*)\\])|(?'oct'-?\\d?)(?'cmd'[a-zA-Z])(?'alter'[-+=#_]?)(?'val'\\d*(?:/\\d*)?\\*?)(?'var'(?:\\$[\\w\\d]+)?)|(?'cmd'[][(){}+*%,;:.!?<|&^=>/^~#@\\\\_-]+)(?'val'\\d*))";
+static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w$-]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\}|\\[(?'longval'[^][]*)\\])|(?'oct'-?\\d?)(?'cmd'[a-zA-Z])(?'alter'[-+=#_]?)(?'abcoct'[,']*)(?'val'\\d*(?:/\\d*)?\\**)(?'var'(?:\\$[\\w\\d]+)?)(?'suffix'[<>!?~]*)|(?'cmd'[][(){}+*%,;:.!?<|&^=>/^~#@\\\\_-]+)(?'val'\\d*))";
 static const string reg0t = "^[/#;][^\r\n]*$";
 static const tregex reg1(reg1t, regoptions), reg0(reg0t, regoptions);
 const string regpd2t = ("^(\\d*)(/\\d*)?(\\*?)$");
@@ -156,18 +156,23 @@ std::fill((char*)m[0].first, (char*)m[0].second, ' ');
 }
 for (tcregex_iterator _end, it(strBegin, strEnd, reg1); it!=_end; ++it) {
 auto m = *it;
-string octS = sub(m["oct"]).c_str(),
-alterS = sub(m["alter"]).c_str();
-int alter=0, oct = octS.empty()? 0 : stoi(octS);
+string octS = sub(m["oct"]), 
+abcoctS = sub(m["abcoct"]),
+alterS = sub(m["alter"]);
+int alter=0, 
+oct  = octS.empty()? 0 : stoi(octS), 
+abcoct = std::count(abcoctS.begin(), abcoctS.end(), '\'') - std::count(abcoctS.begin(), abcoctS.end(), ',');
 if (!alterS.empty() && ALTER_P1.find(alterS)<ALTER_P1.size()) alter=1;
 else if (!alterS.empty() && ALTER_M1.find(alterS)<ALTER_M1.size()) alter= -1;
 finish = const_cast<char*>( m[0].second );
 mtcmds.push_back({
-sub(m["cmd"]).c_str(),
-sub(m["val"]).c_str(),
-sub(m["var"]).c_str(),
-sub(m["longval"]).c_str(),
-oct, alter,
+sub(m["cmd"]),
+sub(m["val"]),
+sub(m["var"]),
+sub(m["longval"]),
+sub(m["suffix"]),
+oct + abcoct, 
+alter,
 m[0].first -strBegin, m[0].second -strBegin
 });
 }
@@ -382,6 +387,21 @@ e.*ptr = (int)round(val);
 evs.push_back(e);
 }}
 
+static void HandleRepeat (lua_State* L, const MT_CMD& e, MT_CHAN& ch, int& pos) {
+if (ch.repeatStack.empty()) throw logic_error("Missing matching repeatition bar");
+auto& mark = ch.repeatStack.back();
+int count = ParseInt(L, e, ch, 1, 1000000);
+mark.marks[count] = pos;
+if (mark.count==count) return;
+else if (count<mark.count) {
+pos = mark.marks[mark.count];
+return;
+}
+if (mark.count>10) return;
+pos =mark.start;
+mark.count++;
+}
+
 static MidiEvent CreateKeySigEv (const MT_CMD& e, int tick) {
 if (e.longval.size()<2 || e.longval.size()>3) throw logic_error("Syntax error in key signature");
 shared_array<unsigned char> a(new unsigned char[2]);
@@ -531,14 +551,8 @@ case '(': case '{': case '[':
 ch.repeatStack.emplace_back( 1, i);
 break;
 case '|': 
-if (!IsEmptyValue(e)) {
-auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
-int count = ParseInt(L, e, ch, 1, 1000000);
-mark.marks[count] = i;
-for (int j=mark.count; j>0; j--) {
-auto it = mark.marks.find(j);
-if (it!=mark.marks.end()) { i = it->second; break; }
-}}break;
+if (!IsEmptyValue(e)) HandleRepeat(L, e, ch, i);
+break;
 case ')': case '}': case ']': {
 int count = ParseInt(L, e, ch, 1, 1000000);
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
@@ -712,14 +726,11 @@ else if (e.cmd==("lyric")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longv
 else if (e.cmd==("mark")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6));
 else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7));
 else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) ch.repeatStack.pop_back();
-else if (e.cmd==("|:")) ch.repeatStack.emplace_back( 1, i );
-else if (e.cmd==(":|")) {
-int count = ParseInt(L, e, ch, 2, 1000000);
-auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
-if (mark.count==count) continue;
-mark.marks[count] = i;
-i=mark.start;
-mark.count++;
+else if (e.cmd[e.cmd.size() -1]==':' && e.cmd.find_first_not_of("|[]")==e.cmd.size() -1) {
+ch.repeatStack.emplace_back( 1, i );
+}
+else if (e.cmd[0]==':' && e.cmd.find_first_not_of("|[]",1)==string::npos) {
+HandleRepeat(L, e, ch, i);
 }
 else if (istarts_with(e.cmd, ("cr")) && e.cmd.size()==3) {
 vector<string> v = SplitLongValue(e,ch, 3, 4);
