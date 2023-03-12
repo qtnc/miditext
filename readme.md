@@ -57,32 +57,65 @@ I'm porting all my old software to WXWidgets, so that's the occasion to finally 
 MIDI text v5 can be downloaded from <http://demo.quentinc.net/Miditext/miditext500b.zip>
 
 # MidiText Syntax
-## Notes
-Notes: optional octave + note letter + optional alteration + optional duration
+## Notes and length
+Notes: optional octave + note letter + optional alteration + optional duration + optional modification
 
 - Notes are indicated by a single letter A-G or a-g. Silences/rests are indicated by letters r, s or z.
 - A note can be preceeded by an octave deviation between -10 and 10. This octave number is relative to the current octave of the channel.
+- Octaves can also be given in ABC-style, with `'` and `,` characters placed after note and length, e.g. `c,` is equivalent to `C` and `C'` is equivalent to `c`.
 - A note can be followed by an alteration: one of `#+` for sharp, one of `-_` for flat
 - A note can be followed by its length/duration, by default when omited the duration is one  quarter note or the default note length if it has been specified
 - Duration is indicated as n/d, where n is the numerator and d the denominator. Both can be omited and if so, both are set to 1. 
 For example, if we assume that default note length is a quarter note, 2 would indicate an half note (2/1), and /2 whould indicate an eight note (1/2). / alone is a shorten for 1/2.
 IF the default note length is  set to an eight note, 4 would represent an half note and /4 a 32th note.
 - Notes can be separated with spaces, or glued together as long as there is no ambiguity. Numbers are preferably taken as lengths rather than octave indications.
-- The enpersant `&` character is used to mark notes that are played together at the same time (chords) rather than one after the other. `C&E&G` is a C major chord.
 
 Examples:
 
 - `C4` is a simple C full note
-- `1e/4` is a E one octave above the current octave and is a 16th note
-- `-1B_/` is an eighth note flat B, one octave below the current octave
+- `1e/4` is a E one octave above the current octave and is a 16th note, which could also have been written `e/4'`
+- `-1B_/` is an eighth note flat B, one octave below the current octave, which could also been written `B_/,`
 - `c2d2e2` are three half notes C, D and E played one after the other
-- `d4&f#4&a4` is a D major chord
+
+## Chors
+Chords can be written in two ways:
+
+- Bracketed notation: `[c4eg]`
+- Ampersant notation: `c2&e2&g2`
+
+- With the bracketed notation, all notes have the same length given by the first note. 
+- With the ampersant notation, all notes may have different lengths and this isn't an error.
+
+## Other notations and rhythms
+A few characters have a special meaning when they follow immediately a note length. For that special meaning to take effect, there shouldn't be any space between the note length and the modification characters.
+
+- `>` and `<` denote broken rhythms. `A>B` means `A4/3 B2/3` and `A<B` means `A2/3 B4/3`.
+- `!?~` are currently reserved but have no use
+
+## Repeatition and bars
+
+- `|:` marks the beginning of a repeated section
+- `|1` marks the first alternation, i.e. the part that will be played the first time 
+- `:|2` marks the end of the first alternation and the beginning of the second alternation, i.e. the part that will be played the second time. 2 can be replaced by 3-9 for more alternates repeatitions
+- `||` or `|]` or `[|` marks the end of the repeated section
+- `(` marks the beginning of a simple repeated section (simple = without alternations)
+- `)n` marks the end of a simple repeated section, where n is the number of repeatitions desired (2+)
+- `|` Simple bars are ignored, you can use them to improve visual appearance / readability if you like
+
+## Variables
+You can use variables where integers are expected, for example: `v$x` sets the note velocity to the value of variable x. Be careful though, you can use variables but not expressions! Variables must be set beforehand.
+
+- To set a variable: $x=127
+- Increment a variable: $x=x+1. Note the absence of $ on the right hand side.
+- Allowed operators: `+ - * / % ^`
+- Allowed functions: math.min/max/floor/log/sin/cos/asin/acos, bit.bor/band/bxor
+- Predefined variables: $channel=current channel, $ppq=MIDI ticks per quarter note (default=480)
 
 ## Short commands
-Short commands: optional octave + single command letter + optional alteration + optional value or duration
+Short commands: optional octave + single command letter + optional alteration + optional value or duration + modification characters
 
-Short commands include notes (with letters A-G a-g), but also several other common command that are frequently used.
-The syntax is quite lenient: length, octave and alteration are always recognized, even with commands where they don't make sense.
+Short commands include regular notes (with letters A-G a-g), but also several other common command that are frequently used.
+The syntax is quite lenient: length, octave, alteration and modifications are always recognized, even with commands where they don't make sense.
 Some command lettters have a different signification when a value/length is specified or not.
 
 - A: lower note A
@@ -120,7 +153,7 @@ Some command lettters have a different signification when a value/length is spec
 - f: higher note F
 - g: higher note G
 - h: set pitch bend value (0-16383)
-- i: set instrument / program change (0-2097151)
+- i: set instrument / program change (0-2097151). 
 - j: portamento time (0-127) (CC5)
 - j: portamento switch on (when no value specified) (CC65)
 - k: sustain pedal on (CC64)
@@ -141,8 +174,8 @@ Some command lettters have a different signification when a value/length is spec
 - y: unused
 - z: silence/rest
 - `&`: chord separator
-- `<`: octave down
-- `>`: octave up
+- `<`: octave down, when used as a prefix
+- `>`: octave up, when used as a prefix
 
 ## Long commands
 Long commands: 
@@ -186,6 +219,7 @@ Long commands are again identified by a single letter, but accept longer paramet
 Elaborate commands are like long commands, except that the command is a word rather than just a single letter. The syntax is the same.
 
 - aftertouchdest(t,x).: Aftertouch destination effect (see GM2 doc). t=type (pitch|volume|vibrato|filter), x=value (0-127)
+- brokenrhythm(value): Fraction of the broken rhythm. For a construct a>b, a value of /3 means a4/3 b2/3, a value of /4 means a7/4 b/4, a value of /2 means a3/2 b/2. Default is /3. 
 - crX(start,end,duration).: slide the specified value from start to end across duration. X is to be replaced with the value that has to be slide: d=last RPN/NRPN, h=pitch bend, n=panning, u=channel pressure, v=channel volume, w=modulation wheel, x=expression
 - crX(param,start,end,duration).: some slides need an additional parameter. c=custom CC(param=CC number), k=key polypressure/aftertouch (param=key note)
 - ctrl(cc,value).: custom control change (CC number 0-127 or CC name, value 0-127)
@@ -201,6 +235,9 @@ Elaborate commands are like long commands, except that the command is a word rat
 - rpn(controllerMSB,controllerLSB,valueMSB,valueLSB).: RPN control change (see MIDI spec)
 - sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int). Terminating 0xF7 is automatically added.
 - transpose(n).: transpose all notes except drums; n=semitones (+-108)
+- velpattern(values..., other) pattern of velocity to apply to notes depending on their beat and bar position. Values are expressed in percentages of full velocity. No velpattern is defined by default.
+If a note falls on a beat, the position in the bar gives the value to take. If the note falls outside of a beat, the other (last value) is taken.
+Example: for the notes abc/d/ef2g2 and velpattern(100, 90, 85, 80, 75), the velocity of a is 100% (beat 1/4), b 90% (beat 2/4), c 85% (beat 3/4), d 75% (beat 3.5/4), e 80% (beat 4/4), f 100% (beat 1/4) and g 85% (beat 3/4).
 
 CC names for ctrl, crc, slide,  and controlName(value) commands:
 
@@ -247,25 +284,6 @@ CC names for ctrl, crc, slide,  and controlName(value) commands:
 - allnotesoff (123)
 - monophonic (126)
 - polyphonic (127)
-
-## Repeatition and bar commands
-
-- `|:` marks the beginning of a repeated section
-- `|1` marks the first alternation, i.e. the part that will be played the first time 
-- `:|2` marks the end of the first alternation and the beginning of the second alternation, i.e. the part that will be played the second time. 2 can be replaced by 3-9 for more alternates repeatitions
-- `||` or `|]` or `[|` marks the end of the repeated section
-- `(` marks the beginning of a simple repeated section (simple = without alternations)
-- `)n` marks the end of a simple repeated section, where n is the number of repeatitions desired (2+)
-- `|` Simple bars are ignored, you can use them to improve visual appearance / readability if you like
-
-## Variables
-You can use variables where integers are expected, for example: `v$x` sets the note velocity to the value of variable x. Be careful though, you can use variables but not expressions! Variables must be set beforehand.
-
-- To set a variable: $x=127
-- Increment a variable: $x=x+1. Note the absence of $ on the right hand side.
-- Allowed operators: `+ - * / % ^`
-- Allowed functions: math.min/max/floor/log/sin/cos/asin/acos, bit.bor/band/bxor
-- Predefined variables: $channel=current channel, $ppq=MIDI ticks per quarter note (default=480)
 
 # Configuration MidiText.ini
 - bassUpdatePeriod=ms: BASS Update period, default: 20ms. Shorter update period means more CPU usage.

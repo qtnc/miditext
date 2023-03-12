@@ -38,6 +38,7 @@ int maxNoteLength=0, multiplier=480;
 int overriddenDuration=0, leftBrokenRhythm=0, brokenRhythmValue = 160;
 bool drum=false, inChord=false;
 struct{ int duration=0, volume=0, count=0, channel=0, octave=0; } echo;
+vector<int> velpattern;
 vector<MT_REPEAT_STACK> repeatStack;
 vector<MT_CMD> onNoteOn;
 };
@@ -352,12 +353,26 @@ int val = stoi(s);
 out.push_back(val);
 }}
 
+static inline int CalcVelocity (const std::vector<int>& pat, int pos, int ppq) {
+auto n = pat.size();
+if (n>=7) ppq/=2;
+if (n>=13) ppq/=2;
+if (pos%ppq==0) {
+switch(n){
+case 0: case 1: return 100;
+case 2: return pat[0];
+default: return pat[(pos/ppq)%(n -1)];
+}}
+else return n? pat.back() : 100;
+}
+
 static void CompileCommands (const vector<MT_CMD>& cmds, MidiFile& m, std::vector<MT_CHAN>& chans, lua_State* L, int curChan, std::vector<std::pair<int,int>>& marks);
 
 static void AddNote (lua_State* L, MidiFile& m, int note, int velocity, int increment, int chIndex, std::vector<MT_CHAN>& chans) {
 auto& ch = chans[chIndex];
 auto& evs = m.events;
 note = std::min(std::max(0, note), 127);
+velocity = std::min(std::max(1, velocity), 127);
 int duration = std::max(0, ch.maxNoteLength? std::min(increment, ch.maxNoteLength) : increment);
 evs.push_back(MidiEvent(ch.pos, 0, 0x90+chIndex, note, velocity));
 evs.push_back(MidiEvent(ch.pos+duration, 0, 0x90+chIndex, note, 0));
@@ -389,7 +404,6 @@ ch.pos += increment;
 static inline void ParseAndAddNote (lua_State* L, MidiFile& m, const MT_CMD& e, std::vector<MT_CHAN>& chans, int curChan) {
 auto& ch = chans[curChan];
 int oct = 12*(ch.octave+e.oct) + NOTES[e.cmd[0]] + e.alter + (ch.drum? 0 : ch.transpose);
-int vel = ch.velocity;
 int dur = ParseDuration(L, e, ch, ch.multiplier);
 int br = ParseBrokenRhythm(e.suffix, dur, ch.brokenRhythmValue, m.ppq);
 if (ch.inChord) {
@@ -397,6 +411,7 @@ ch.pos -= ch.overriddenDuration;
 if (ch.overriddenDuration) dur = ch.overriddenDuration;
 else ch.overriddenDuration = dur;
 }
+int vel = ch.velocity * CalcVelocity(ch.velpattern, ch.pos, m.ppq) /100;
 AddNote(L, m, oct, vel, dur + br + ch.leftBrokenRhythm, curChan, chans);
 ch.leftBrokenRhythm = -br;
 }
@@ -709,8 +724,13 @@ else if (e.cmd==("transpose")) {
 int val = ParseInt(L, e.longval, ch, -108, 108);
 for (MT_CHAN& c: chans) c.transpose = val;
 }
-else if (e.cmd=="brokenrhythmlength") {
+else if (e.cmd=="brokenrhythm") {
 ch.brokenRhythmValue = ParseDuration(L, e.longval, ch, m.ppq);
+}
+else if (e.cmd=="velpattern") {
+vector<string> v = SplitLongValue(e, ch,  0, 24);
+ch.velpattern.clear();
+for (auto& s: v) ch.velpattern.push_back( ParseInt(L, s, ch, 1, 1000) );
 }
 else if (e.cmd=="onnoteon") {
 ch.onNoteOn.clear();
@@ -755,7 +775,9 @@ else if (e.cmd==("instrument")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.
 else if (e.cmd==("lyric")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 5));
 else if (e.cmd==("mark")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6));
 else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7));
-else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) ch.repeatStack.pop_back();
+else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) {
+ch.repeatStack.pop_back();
+}
 else if (e.cmd[e.cmd.size() -1]==':' && e.cmd.find_first_not_of("|[]")==e.cmd.size() -1) {
 ch.repeatStack.emplace_back( 1, i );
 }
