@@ -32,8 +32,11 @@ MT_REPEAT_STACK (int c, int s): count(c), start(s), marks() {}
 };
 
 struct MT_CHAN {
-int pos=0, prevPos=0, velocity=127, octave=5, transpose=0, maxNoteLength=0, multiplier=480, leftBrokenRhythm=0;
-bool drum=false;
+int pos=0, prevPos=0;
+int velocity=127, octave=5, transpose=0;
+int maxNoteLength=0, multiplier=480;
+int overriddenDuration=0, leftBrokenRhythm=0, brokenRhythmValue = 160;
+bool drum=false, inChord=false;
 struct{ int duration=0, volume=0, count=0, channel=0, octave=0; } echo;
 vector<MT_REPEAT_STACK> repeatStack;
 vector<MT_CMD> onNoteOn;
@@ -286,10 +289,10 @@ ctrl = it->second;
 return ctrl;
 }
 
-static inline int ParseBrokenRhythm (const std::string& s, int multiplier) {
+static inline int ParseBrokenRhythm (const std::string& s, int multiplier, int value, int ppq) {
 int add = std::count(s.begin(), s.end(), '>');
 int rem = std::count(s.begin(), s.end(), '<');
-return (multiplier * add / 3) - (multiplier * rem / 3);
+return (multiplier * add * value / ppq) - (multiplier * rem * value / ppq);
 }
 
 static void ParseIntOrStringAndAppend (lua_State* L, vector<unsigned char>& out, MT_CHAN& ch, string& s) {
@@ -386,9 +389,15 @@ ch.pos += increment;
 static inline void ParseAndAddNote (lua_State* L, MidiFile& m, const MT_CMD& e, std::vector<MT_CHAN>& chans, int curChan) {
 auto& ch = chans[curChan];
 int oct = 12*(ch.octave+e.oct) + NOTES[e.cmd[0]] + e.alter + (ch.drum? 0 : ch.transpose);
+int vel = ch.velocity;
 int dur = ParseDuration(L, e, ch, ch.multiplier);
-int br = ParseBrokenRhythm(e.suffix, dur);
-AddNote(L, m, oct, ch.velocity, dur + br + ch.leftBrokenRhythm, curChan, chans);
+int br = ParseBrokenRhythm(e.suffix, dur, ch.brokenRhythmValue, m.ppq);
+if (ch.inChord) {
+ch.pos -= ch.overriddenDuration;
+if (ch.overriddenDuration) dur = ch.overriddenDuration;
+else ch.overriddenDuration = dur;
+}
+AddNote(L, m, oct, vel, dur + br + ch.leftBrokenRhythm, curChan, chans);
 ch.leftBrokenRhythm = -br;
 }
 
@@ -481,6 +490,13 @@ break;
 case '&':
 ch.pos = ch.prevPos;
 break;
+case '[':
+ch.inChord = true;
+break;
+case ']':
+ch.inChord = false;
+ch.overriddenDuration = 0;
+break;
 case 'L':
 ch.multiplier = ParseDuration(L, e, ch, m.ppq);
 break;
@@ -558,13 +574,13 @@ ev.setDataAsInt24(mpq);
 ev.data2 = 81;
 m.events.push_back(ev);
 }break;
-case '(': case '{': case '[':
+case '(': case '{': 
 ch.repeatStack.emplace_back( 1, i);
 break;
 case '|': 
 if (!IsEmptyValue(e)) HandleRepeat(L, e, ch, i);
 break;
-case ')': case '}': case ']': {
+case ')': case '}': {
 int count = ParseInt(L, e, ch, 1, 1000000);
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
 if (mark.count==count) ch.repeatStack.pop_back();
@@ -692,6 +708,9 @@ AddNote(L, m, note, vel, dur, curChan, chans);
 else if (e.cmd==("transpose")) {
 int val = ParseInt(L, e.longval, ch, -108, 108);
 for (MT_CHAN& c: chans) c.transpose = val;
+}
+else if (e.cmd=="brokenrhythmlength") {
+ch.brokenRhythmValue = ParseDuration(L, e.longval, ch, m.ppq);
 }
 else if (e.cmd=="onnoteon") {
 ch.onNoteOn.clear();
