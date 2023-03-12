@@ -32,7 +32,7 @@ MT_REPEAT_STACK (int c, int s): count(c), start(s), marks() {}
 };
 
 struct MT_CHAN {
-int pos=0, prevPos=0, velocity=127, octave=5, transpose=0, maxNoteLength=0, multiplier=480;
+int pos=0, prevPos=0, velocity=127, octave=5, transpose=0, maxNoteLength=0, multiplier=480, leftBrokenRhythm=0;
 bool drum=false;
 struct{ int duration=0, volume=0, count=0, channel=0, octave=0; } echo;
 vector<MT_REPEAT_STACK> repeatStack;
@@ -286,6 +286,12 @@ ctrl = it->second;
 return ctrl;
 }
 
+static inline int ParseBrokenRhythm (const std::string& s, int multiplier) {
+int add = std::count(s.begin(), s.end(), '>');
+int rem = std::count(s.begin(), s.end(), '<');
+return (multiplier * add / 3) - (multiplier * rem / 3);
+}
+
 static void ParseIntOrStringAndAppend (lua_State* L, vector<unsigned char>& out, MT_CHAN& ch, string& s) {
 if (starts_with(s, "$")) {
 lua_settop(L,0);
@@ -348,8 +354,8 @@ static void CompileCommands (const vector<MT_CMD>& cmds, MidiFile& m, std::vecto
 static void AddNote (lua_State* L, MidiFile& m, int note, int velocity, int increment, int chIndex, std::vector<MT_CHAN>& chans) {
 auto& ch = chans[chIndex];
 auto& evs = m.events;
-int duration = ch.maxNoteLength? std::min(increment, ch.maxNoteLength) : increment;
 note = std::min(std::max(0, note), 127);
+int duration = std::max(0, ch.maxNoteLength? std::min(increment, ch.maxNoteLength) : increment);
 evs.push_back(MidiEvent(ch.pos, 0, 0x90+chIndex, note, velocity));
 evs.push_back(MidiEvent(ch.pos+duration, 0, 0x90+chIndex, note, 0));
 if (ch.echo.duration && ch.echo.volume && ch.echo.count) for (int z=0, 
@@ -377,6 +383,16 @@ ch.prevPos = ch.pos;
 ch.pos += increment;
 }
 
+static inline void ParseAndAddNote (lua_State* L, MidiFile& m, const MT_CMD& e, std::vector<MT_CHAN>& chans, int curChan) {
+auto& ch = chans[curChan];
+int oct = 12*(ch.octave+e.oct) + NOTES[e.cmd[0]] + e.alter + (ch.drum? 0 : ch.transpose);
+int dur = ParseDuration(L, e, ch, ch.multiplier);
+int br = ParseBrokenRhythm(e.suffix, dur);
+AddNote(L, m, oct, ch.velocity, dur + br + ch.leftBrokenRhythm, curChan, chans);
+ch.leftBrokenRhythm = -br;
+}
+
+
 static void AddSlide(vector<MidiEvent>& evs, int start, int duration, int status, int data1, int data2, int min, int max, int MidiEvent::* ptr) {
 int diff = max-min;
 double valInc= (max-min)>0? 1 : -1, timeInc = 1.0 * duration/abs(diff);
@@ -397,7 +413,6 @@ else if (count<mark.count) {
 pos = mark.marks[mark.count];
 return;
 }
-if (mark.count>10) return;
 pos =mark.start;
 mark.count++;
 }
@@ -441,11 +456,7 @@ try {
 if (e.cmd.size()==1 && e.longval.empty()) switch(e.cmd[0]){
 case 'a' ... 'g' :
 case 'A' ... 'G' :
-AddNote(L, m, 
-12*(ch.octave+e.oct) + NOTES[e.cmd[0]] + e.alter + (ch.drum? 0 : ch.transpose), 
-ch.velocity, 
-ParseDuration(L, e, ch, ch.multiplier),
-curChan, chans);
+ParseAndAddNote(L, m, e, chans, curChan);
 break;
 case 'o':
 ch.octave = ParseInt(L, e, ch, 0, 10);
