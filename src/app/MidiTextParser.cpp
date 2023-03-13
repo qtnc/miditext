@@ -27,14 +27,14 @@ int begin, end;
 
 struct MT_REPEAT_STACK {
 int count, start;
-unordered_map<int,int> marks;
+vector<int> marks;
 MT_REPEAT_STACK (int c, int s): count(c), start(s), marks() {}
 };
 
 struct MT_CHAN {
 int pos=0, prevPos=0;
 int velocity=127, octave=5, transpose=0;
-int maxNoteLength=0, multiplier=480;
+int maxNoteLength=0, multiplier=480, groupMultiplier=0, groupMultiplierCount=0;
 int overriddenDuration=0, leftBrokenRhythm=0, brokenRhythmValue = 160;
 bool drum=false, inChord=false;
 struct{ int duration=0, volume=0, count=0, channel=0, octave=0; } echo;
@@ -405,17 +405,20 @@ static inline void ParseAndAddNote (lua_State* L, MidiFile& m, const MT_CMD& e, 
 auto& ch = chans[curChan];
 int oct = 12*(ch.octave+e.oct) + NOTES[e.cmd[0]] + e.alter + (ch.drum? 0 : ch.transpose);
 int dur = ParseDuration(L, e, ch, ch.multiplier);
-int br = ParseBrokenRhythm(e.suffix, dur, ch.brokenRhythmValue, m.ppq);
+if (ch.groupMultiplierCount) {
+ch.groupMultiplierCount--;
+dur = (dur * ch.groupMultiplier) / m.ppq;
+}
 if (ch.inChord) {
 ch.pos -= ch.overriddenDuration;
 if (ch.overriddenDuration) dur = ch.overriddenDuration;
 else ch.overriddenDuration = dur;
 }
+int br = ParseBrokenRhythm(e.suffix, dur, ch.brokenRhythmValue, m.ppq);
 int vel = ch.velocity * CalcVelocity(ch.velpattern, ch.pos, m.ppq) /100;
 AddNote(L, m, oct, vel, dur + br + ch.leftBrokenRhythm, curChan, chans);
 ch.leftBrokenRhythm = -br;
 }
-
 
 static void AddSlide(vector<MidiEvent>& evs, int start, int duration, int status, int data1, int data2, int min, int max, int MidiEvent::* ptr) {
 int diff = max-min;
@@ -427,18 +430,27 @@ e.*ptr = (int)round(val);
 evs.push_back(e);
 }}
 
-static void HandleRepeat (lua_State* L, const MT_CMD& e, MT_CHAN& ch, int& pos) {
-if (ch.repeatStack.empty()) throw logic_error("Missing matching repeatition bar");
+static void ParseNoteGroupIndic(lua_State* L, const MT_CMD& e, MT_CHAN& ch, MidiFile& m) {
+int n = ParseInt(L, e, ch, 2, 100);
+int r = n%2? 2 : 3;
+ch.groupMultiplierCount = n;
+ch.groupMultiplier = (r * m.ppq) / n;
+}
+
+static bool HandleRepeat (lua_State* L, const MT_CMD& e, MT_CHAN& ch, int& pos) {
+if (ch.repeatStack.empty()) ch.repeatStack.emplace_back( 1, 0);
 auto& mark = ch.repeatStack.back();
 int count = ParseInt(L, e, ch, 1, 1000000);
-mark.marks[count] = pos;
-if (mark.count==count) return;
+while(mark.marks.size()<count -1) mark.marks.push_back(mark.marks.back());
+while (mark.marks.size()<count) mark.marks.push_back(pos);
+if (mark.count==count) return true;
 else if (count<mark.count) {
-pos = mark.marks[mark.count];
-return;
+pos = mark.marks[mark.count -1];
+return false;
 }
 pos =mark.start;
 mark.count++;
+return false;
 }
 
 static MidiEvent CreateKeySigEv (const MT_CMD& e, int tick) {
@@ -590,12 +602,14 @@ ev.data2 = 81;
 m.events.push_back(ev);
 }break;
 case '(': case '{': 
-ch.repeatStack.emplace_back( 1, i);
+if (IsEmptyValue(e)) ch.repeatStack.emplace_back( 1, i);
+else ParseNoteGroupIndic(L, e, ch, m);
 break;
 case '|': 
 if (!IsEmptyValue(e)) HandleRepeat(L, e, ch, i);
 break;
-case ')': case '}': {
+case ')': case '}': 
+if (!IsEmptyValue(e)) {
 int count = ParseInt(L, e, ch, 1, 1000000);
 auto& mark = ch.repeatStack.at(ch.repeatStack.size() -1);
 if (mark.count==count) ch.repeatStack.pop_back();
@@ -776,6 +790,7 @@ else if (e.cmd==("lyric")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longv
 else if (e.cmd==("mark")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6));
 else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7));
 else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) {
+if (IsEmptyValue(e) || HandleRepeat(L, e, ch, i))
 ch.repeatStack.pop_back();
 }
 else if (e.cmd[e.cmd.size() -1]==':' && e.cmd.find_first_not_of("|[]")==e.cmd.size() -1) {
