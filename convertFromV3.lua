@@ -23,12 +23,8 @@ end
 return string.format("p(%d, %d, %d)", bank, banklsb, program)
 end
 
-local function convPitchRange (n)
-return 'H' .. (n*100)
-end
-
 local function convRepeat (base, first, last, count)
-return '|:' .. base .. '|1' .. first .. ':|' .. count .. '||'
+return '|:' .. base .. '|1' .. first .. ':|' .. count .. ' ' .. last .. '||'
 end
 
 local rules = {
@@ -46,7 +42,7 @@ local rules = {
 { '%[[vV]:(%d+)%]', convVoice },
 { 'p(%d+),(%d+)', convProgram },
 { 'l(%d+)', 'n%1' },
-{ 'h.sens(%d+)', convPitchRange },
+{ 'h.sens(%d+)', 'H%1'  },
 { 'tem(%d+)', 't%1' },
 { 'k:on', 'k' },
 { 'k:off', 'K' },

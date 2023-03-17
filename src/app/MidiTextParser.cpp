@@ -107,14 +107,14 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 { "polyphonic", 127 }
 };
 
-static const string ALTER_P1 = "#+^'", ALTER_M1 = "_-,";
+static const string ALTER_P1 = "#+^", ALTER_M1 = "_-";
 
 static const auto regoptions = regex_constants::perl | regex_constants::mod_s |  regex_constants::collate;
-static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w$-]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\}|\\[(?'longval'[^][]*)\\])|(?'oct'-?\\d?)(?'cmd'[a-zA-Z])(?'alter'[-+=#_]?)(?'abcoct'[,']*)(?'val'\\d*(?:/\\d*)?\\**)(?'var'(?:\\$[\\w\\d]+)?)(?'suffix'[<>!?~]*)|(?'cmd'[][(){}+*%,;:.!?<|&^=>/^~#@\\\\_-]+)(?'val'\\d*))";
+static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w$-]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\})|(?'oct'-?\\d)?(?'cmd'[a-zA-Z])(?'alter'[=#_^+-]*)(?'abcoct'[,']*)(?'val'\\d*(?:/\\d*)?\\**)(?'var'(?:\\$[\\w\\d]+)?)(?'suffix'[<>!?~]*)|(?'cmd'[[({:]?\\|*[])}:]?|(?'symb'[&~^*/\\\\@#<>.,;'+-])\\k<symb>*)(?'val'\\d*))";
 static const string reg0t = "^[/#;][^\r\n]*$";
-static const tregex reg1(reg1t, regoptions), reg0(reg0t, regoptions);
-const string regpd2t = ("^(\\d*)(/\\d*)?(\\*?)$");
-tregex regpd2(regpd2t, regoptions);
+	static const tregex reg1(reg1t, regoptions), reg0(reg0t, regoptions);
+static const string regpd2t = ("^(\\d*)(/\\d*)?(\\*?)$");
+static tregex regpd2(regpd2t, regoptions);
 
 
 static inline string sub (const tsub_match& p) {
@@ -353,17 +353,11 @@ int val = stoi(s);
 out.push_back(val);
 }}
 
-static inline int CalcVelocity (const std::vector<int>& pat, int pos, int ppq) {
+static inline int CalcVelocity (const std::vector<int>& pat, int pos) {
 auto n = pat.size();
-if (n>=7) ppq/=2;
-if (n>=13) ppq/=2;
-if (pos%ppq==0) {
-switch(n){
-case 0: case 1: return 100;
-case 2: return pat[0];
-default: return pat[(pos/ppq)%(n -1)];
-}}
-else return n? pat.back() : 100;
+if (n<3) return 100;
+if (pos%pat[n -1]) return pat[ n-2];
+else return pat[(pos/pat[n -1])%(n -2)];
 }
 
 static void CompileCommands (const vector<MT_CMD>& cmds, MidiFile& m, std::vector<MT_CHAN>& chans, lua_State* L, int curChan, std::vector<std::pair<int,int>>& marks);
@@ -415,7 +409,7 @@ if (ch.overriddenDuration) dur = ch.overriddenDuration;
 else ch.overriddenDuration = dur;
 }
 int br = ParseBrokenRhythm(e.suffix, dur, ch.brokenRhythmValue, m.ppq);
-int vel = ch.velocity * CalcVelocity(ch.velpattern, ch.pos, m.ppq) /100;
+int vel = ch.velocity * CalcVelocity(ch.velpattern, ch.pos) /100;
 AddNote(L, m, oct, vel, dur + br + ch.leftBrokenRhythm, curChan, chans);
 ch.leftBrokenRhythm = -br;
 }
@@ -578,7 +572,7 @@ case 'k':
 m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 64, 127));
 break;
 case 'K':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 65, 0));
+m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 64, 0));
 break;
 case 'W': {
 int val = ParseInt(L, e, ch, 0, 16383);
@@ -630,7 +624,7 @@ case 'L': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 5)); break;
 case 'R': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6)); break;
 case 'P': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7)); break;
 case 'M': m.events.push_back(CreateTimeSigEv(e, ch.pos)); break;
-case 'Q': m.events.push_back(CreateKeySigEv(e, ch.pos)); break;
+case 'K': m.events.push_back(CreateKeySigEv(e, ch.pos)); break;
 case 'V': 
 curChan = ParseInt(L, e.longval, ch, 1, 16) -1; 
 lua_pushinteger(L, curChan+1);
@@ -742,9 +736,13 @@ else if (e.cmd=="brokenrhythm") {
 ch.brokenRhythmValue = ParseDuration(L, e.longval, ch, m.ppq);
 }
 else if (e.cmd=="velpattern") {
-vector<string> v = SplitLongValue(e, ch,  0, 24);
+vector<string> v = SplitLongValue(e, ch,  0, 1000);
 ch.velpattern.clear();
+if (v.size()<3) continue;
+int dur = ParseDuration(L, v.back(), ch, m.ppq);
+v.pop_back();
 for (auto& s: v) ch.velpattern.push_back( ParseInt(L, s, ch, 1, 1000) );
+ch.velpattern.push_back(dur);
 }
 else if (e.cmd=="onnoteon") {
 ch.onNoteOn.clear();

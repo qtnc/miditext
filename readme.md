@@ -2,7 +2,7 @@
 MidiText is a small program allowing you to create/compose MIDI songs by entering text-based commands.
 
 The commands used in MidiText are like 
-[ABC notation](https://en.wikipedia.org/wiki/ABC_notation)
+[ABC notation](https://www.abcnotation.com/)
 or
 [MML](https://en.wikipedia.org/wiki/Music_Macro_Language)
 though quite different, with the goal to give access to more specific MIDI features.
@@ -56,6 +56,65 @@ There's no reason afterall. I won't ever make money or what with something like 
 I'm porting all my old software to WXWidgets, so that's the occasion to finally do it, 20 years after the initial idea. It has well evolved since that time, though I haven't yet ported all the features of MidiText v3, v4 and v5.
 MIDI text v5 can be downloaded from <http://demo.quentinc.net/Miditext/miditext500b.zip>
 
+# Example
+## Example 1
+
+[demo1.mid](http://vrac.quentinc.net/demo1.mid)
+```
+T(MidiText demo 1)
+M:4/4
+K:DM
+t120 
+L/4
+edG2[Bg]r[B2g]edG2[Bg]r[B2g]edG2[B2g]E2[B2g]D2[Af#]r[A2f#]
+edD2[Af#]r[A2f#]edD2[Af#]r[A2f#]edD2A&f#2E2[A2f#]G2[Bg]r[B2g] 
+```
+
+
+
+## Example 2
+
+[demo2.mid](http://vrac.quentinc.net/demo2.mid)
+```
+title(MidiText Demo 2)
+M:4/4
+K:CM
+t144
+
+
+V:1
+p0 o5
+velpattern(100, 85, 90, 85, 75, 1)
+g/>g/e/>g/ag
+f/>f/d/>f/gf
+e/>e/c/>e/fe
+d/>d/B/>d/ed
+c2 >(3e/4g/4c'3
+
+V:2
+p0 o4
+v84
+velpattern(100, 85, 90, 85, 75, 1)
+c [eg]G [eg]
+d [fg] G [fg]
+c [eg] G [eg]
+G [Bd] D [Bd]
+[ceg]
+G/>A/c
+
+```
+
+## More examples
+Another demo:
+[demo3.mid](http://vrac.quentinc.net/demo3.mid)
+and it's [recorded OGG version](http://vrac.quentinc.net/demo3.ogg)
+
+A full project with source included:
+[tpdcv4.7.mid](http://vrac.quentinc.net/tpdcv4.7.mid)
+and result with ARachno soundfont
+[tpdcv4.7.ogg](http://vrac.quentinc.net/tpdcv4.7.ogg)
+
+
 # MidiText Syntax
 ## Notes and length
 Notes: optional octave + note letter + optional alteration + optional duration + optional modification
@@ -63,7 +122,7 @@ Notes: optional octave + note letter + optional alteration + optional duration +
 - Notes are indicated by a single letter A-G or a-g. Silences/rests are indicated by letters r, s or z.
 - A note can be preceeded by an octave deviation between -10 and 10. This octave number is relative to the current octave of the channel.
 - Octaves can also be given in ABC-style, with `'` and `,` characters placed after note and length, e.g. `c,` is equivalent to `C` and `C'` is equivalent to `c`.
-- A note can be followed by an alteration: one of `#+` for sharp, one of `-_` for flat
+- A note can be followed by an alteration: one of `#+^` for sharp, one of `-_` for flat
 - A note can be followed by its length/duration, by default when omited the duration is one  quarter note or the default note length if it has been specified
 - Duration is indicated as n/d, where n is the numerator and d the denominator. Both can be omited and if so, both are set to 1. 
 For example, if we assume that default note length is a quarter note, 2 would indicate an half note (2/1), and /2 whould indicate an eight note (1/2). / alone is a shorten for 1/2.
@@ -197,13 +256,13 @@ Long commands are again identified by a single letter, but accept longer paramet
 - H: unused
 - I or instrument: instrument name (MIDI meta 4)
 - J: unused
-- K: unused
+- K: key signature, in the form of note+optional alteration + 'M' (major) or 'm' (minor). For example, Gm=G minor, E_M=E flat major
 - L or lyric: song lyrics (MIDI meta 5)
 - M: time signature (aka meter), in the form numerator/denominator. For example 3/4, 4/4, 6/8
 - N: unused
 - O: unused
 - P or cue: cue point (MIDI meta 7)
-- Q: key signature, in the form of note+optional alteration + 'M' (major) or 'm' (minor). For example, Gm=G minor, E_M=E flat major
+- Q: unused
 - R or mark: marker (MIDI meta 6)
 - S: unused
 - T or title: song title (MIDI meta 3)
@@ -235,9 +294,9 @@ Elaborate commands are like long commands, except that the command is a word rat
 - rpn(controllerMSB,controllerLSB,valueMSB,valueLSB).: RPN control change (see MIDI spec)
 - sysex(values...).: send a custom system exclusive message. values=double quoted strings (encoded in UTF-8) or numbers in one of the forms 123 (single byte), 123S (short), 123L (int), 3.14f (float), 3.14d (double) or 123J (64 bit int). Terminating 0xF7 is automatically added.
 - transpose(n).: transpose all notes except drums; n=semitones (+-108)
-- velpattern(values..., other) pattern of velocity to apply to notes depending on their beat and bar position. Values are expressed in percentages of full velocity. No velpattern is defined by default.
+- velpattern(values..., other, beat) pattern of velocity to apply to notes depending on their beat and bar position. Values are expressed in percentages of full velocity. No velpattern is defined by default.
 If a note falls on a beat, the position in the bar gives the value to take. If the note falls outside of a beat, the other (last value) is taken.
-Example: for the notes abc/d/ef2g2 and velpattern(100, 90, 85, 80, 75), the velocity of a is 100% (beat 1/4), b 90% (beat 2/4), c 85% (beat 3/4), d 75% (beat 3.5/4), e 80% (beat 4/4), f 100% (beat 1/4) and g 85% (beat 3/4).
+Example: for the notes abc/d/ef2g2 and velpattern(100, 90, 85, 80, 75, 1), the velocity of a is 100% (beat 1/4), b 90% (beat 2/4), c 85% (beat 3/4), d 75% (beat 3.5/4), e 80% (beat 4/4), f 100% (beat 1/4) and g 85% (beat 3/4).
 
 CC names for ctrl, crc, slide,  and controlName(value) commands:
 
