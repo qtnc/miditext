@@ -17,44 +17,41 @@ if alt=='+' then alt='#'
 elseif alt=='-' then alt='_'
 end
 local re = notes[note..alt]
-print('Note>value: ', note..alt, re)
 return re
 end
 
-function valuenote (oct, note)
-if not oct or oct=='' then oct=0 end
+function valuenote (note, oct)
+if not oct then oct='' end
 while note>=24 do 
-oct=oct+1
+oct=oct.."'"
 note = note -12
 end
 while note<0 do
-oct = oct -1
+oct = oct..','
 note = note +12
 end
-if oct==0 then oct='' end
-local re = oct..notes[note]
-print('Value>note: ', oct, note, re)
+local re = notes[note]..oct
 return re
 end
 
-function transposeUp (oct, note, alt)
+function transposeUp (note, alt, oct)
 local note = notevalue(note,alt)
-return valuenote(oct, note+1)
+return valuenote(note+1, oct)
 end
 
-function transposeDown (oct, note, alt)
+function transposeDown (note, alt, oct)
 local note = notevalue(note,alt)
-return valuenote(oct, note-1)
+return valuenote(note -1, oct)
 end
 
 function transposeHelper (n)
 if n==-1 then return transposeDown
 elseif n==1 then return transposeUp
-else print('Problem1')
+else error('Unknown transposition '..n)
 end end
 
 function transpose (s,n)
-return s:gsub("(%-?%d?)([abcdefgABCDEFG])([-+#_,']?)", transposeHelper(n))
+return s:gsub("([abcdefgABCDEFG])([-+#_]?)([,']*)", transposeHelper(n))
 end
 
 print('transpose OK')

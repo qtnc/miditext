@@ -40,7 +40,7 @@ app(app)
 {
 println("Initializing main window GUI...");
 auto panel = new wxPanel(this);
-textArea = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_RICH2 | wxTE_NOHIDESEL | wxVSCROLL | wxHSCROLL | wxALWAYS_SHOW_SB | wxCLIP_CHILDREN);
+textArea = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_RICH2 | wxTE_NOHIDESEL | wxVSCROLL | wxHSCROLL | wxALWAYS_SHOW_SB);
 textArea->SetMaxLength(16777215);
 status = CreateStatusBar();
 
