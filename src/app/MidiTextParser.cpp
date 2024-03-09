@@ -5,6 +5,7 @@
 #include<string>
 #include<unordered_map>
 #include<boost/regex.hpp>
+#include<sstream>
 #include "../common/println.hpp"
 extern "C"{
 #include<lua/lua.h>
@@ -22,7 +23,7 @@ typedef boost::sub_match<const char*> tsub_match;
 struct MT_CMD {
 const string cmd, val, var, longval, suffix;
 int oct, alter;
-int begin, end;
+long long begin, end;
 };
 
 struct MT_REPEAT_STACK {

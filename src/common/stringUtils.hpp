@@ -59,7 +59,7 @@ if (y==0) return x;
 for (size_t i=0, c=0, n=str.size(); i<n; i++) {
 if (str[i]=='\n' && ++c==y) return i+x+1;
 }
-return std::string::npos;
+return static_cast<S>(std::string::npos);
 }
 
 

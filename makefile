@@ -24,9 +24,9 @@ OBJDIR=obj$(NAME_SUFFIX)/
 
 CXX=g++
 WINDRES=windres
-WINDRESFLAGS=$(addprefix -D,$(DEFINES)) -I"$(dir $(shell where $(WINDRES)))..\i686-w64-mingw32\include"
+WINDRESFLAGS=$(addprefix -D,$(DEFINES)) -I"$(CPATH)"
 CXXFLAGS=-std=gnu++17 -Wextra $(addprefix -D,$(DEFINES)) -mthreads
-LDFLAGS=-lwxbase33u -lwxmsw33u_core -lws2_32 -L. -lbass -lbass_fx -lbassmidi -lbassmix -lbassenc -lbassenc_mp3 -lbassenc_ogg -lbassenc_flac -lbassenc_opus -lboost-regex -lfmt -llua -lUniversalSpeech -liphlpapi -mthreads -mthreads -mwindows
+LDFLAGS=-lwxbase33u -lwxmsw33u_core -lws2_32 -lbass -lbass_fx -lbassmidi -lbassmix -lbassenc -lbassenc_mp3 -lbassenc_ogg -lbassenc_flac -lbassenc_opus -lboost_regex -lfmt -llua -lUniversalSpeech -liphlpapi -mthreads -mthreads -mwindows
 
 SRCS=$(wildcard src/app/*.cpp) $(wildcard src/common/*.cpp)
 RCSRCS=$(wildcard src/app/*.rc)

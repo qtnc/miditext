@@ -36,11 +36,11 @@ return getDeviceList(BASS_RecordGetDeviceInfo, includeLoopback);
 }
 
 static void CALLBACK DSPCopyProc (HDSP dsp, DWORD source, void* buffer, DWORD length, void* dest) {
-BASS_StreamPutData(reinterpret_cast<DWORD>(dest), buffer, length);
+BASS_StreamPutData(reinterpret_cast<uintptr_t>(dest), buffer, length);
 }
 
 static void CALLBACK SyncFreeProc (HSYNC sync, DWORD channel, DWORD param, void* dest) {
-BASS_StreamFree(reinterpret_cast<DWORD>(dest));
+BASS_StreamFree(reinterpret_cast<uintptr_t>(dest));
 }
 
 DWORD BASS_StreamCreateCopy (DWORD source, bool decode) {
