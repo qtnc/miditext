@@ -3,11 +3,6 @@
 
 #pragma GCC diagnostic ignored "-Wsign-compare"
 
-#define VERSION_STRING "2023.3.5"
-//#define VERSION_MAJOR 6
-//#define VERSION_MINOR 0
-//#define VERSION_BUILD 0
-
 #define APP_DISPLAY_NAME "MidiText"
 #define APP_NAME "QCMIDTXT"
 #define APP_VENDOR "QuentinC"
