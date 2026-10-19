@@ -20,6 +20,8 @@ typedef boost::cregex_iterator tcregex_iterator;
 typedef boost::cmatch tcmatch;
 typedef boost::sub_match<const char*> tsub_match;
 
+static const int DEFAULT_PPQN = 480;
+
 struct MT_CMD {
 const string cmd, val, var, longval, suffix;
 int oct, alter;
@@ -34,9 +36,9 @@ MT_REPEAT_STACK (int c, int s): count(c), start(s), marks() {}
 
 struct MT_CHAN {
 int pos=0, prevPos=0;
-int velocity=127, octave=5, transpose=0;
-int maxNoteLength=0, multiplier=480, groupMultiplier=0, groupMultiplierCount=0;
-int overriddenDuration=0, leftBrokenRhythm=0, brokenRhythmValue = 160;
+int velocity=127, octave=5, transpose=0, track=0;
+int maxNoteLength=0, multiplier=DEFAULT_PPQN, groupMultiplier=0, groupMultiplierCount=0;
+int overriddenDuration=0, leftBrokenRhythm=0, brokenRhythmValue = DEFAULT_PPQN/3;
 bool drum=false, inChord=false;
 struct{ int duration=0, volume=0, count=0, channel=0, octave=0; } echo;
 vector<int> velpattern;
@@ -70,7 +72,7 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 { "portatime", 5 }, { "portamentotime", 5 },
 { "data", 6 }, { "datamsb", 6 }, 
 { "volume", 7 }, { "vol", 7 },
-{ "balance", 8 },
+{ "balance", 8 }, { "bal", 8 },
 { "pan", 10 }, { "panning", 10 },
 { "expression", 11 }, { "expr", 11 },
 { "banklsb", 32 },
@@ -86,7 +88,7 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 { "attack", 73 },
 { "brightness", 74 }, { "filtercutoff", 74 },
 { "decay", 75 },
-{ "vibratorate", 76 }, { "vibratospeed", 76 }, { "vibspeed", 76 },
+{ "vibratorate", 76 }, { "vibratospeed", 76 }, { "vibspeed", 76 }, { "vibrate", 76 },
 { "vibratodepth", 77 }, { "vibdepth", 77 },
 { "vibratodelay", 78 }, { "vibdelay", 78 },
 { "portanote", 84 }, { "portamentonote", 84 },
@@ -222,6 +224,7 @@ string numS = sub(m[1]), denomS = sub(m[2]), dottedS = sub(m[3]);
 int num = numS.empty()? 1 : stoi(numS), denom = 1;
 bool dotted = !dottedS.empty();
 if (denomS==("/")) denom=2;
+else if (denomS==("//")) denom=4;
 else if (!denomS.empty()) denom = stoi(denomS.substr(1));
 if (dotted) return 3 * multiplier * num / (2 * denom);
 else return multiplier * num / denom;
@@ -369,8 +372,8 @@ auto& evs = m.events;
 note = std::min(std::max(0, note), 127);
 velocity = std::min(std::max(1, velocity), 127);
 int duration = std::max(0, ch.maxNoteLength? std::min(increment, ch.maxNoteLength) : increment);
-evs.push_back(MidiEvent(ch.pos, 0, 0x90+chIndex, note, velocity));
-evs.push_back(MidiEvent(ch.pos+duration, 0, 0x90+chIndex, note, 0));
+evs.push_back(MidiEvent(ch.pos, ch.track, 0x90+chIndex, note, velocity));
+evs.push_back(MidiEvent(ch.pos+duration, ch.track, 0x90+chIndex, note, 0));
 if (ch.echo.duration && ch.echo.volume && ch.echo.count) for (int z=0, 
 pos=ch.pos+ch.echo.duration,
 vol = velocity * ch.echo.volume /100,
@@ -380,8 +383,8 @@ z++,
 pos+=ch.echo.duration,
 vol = vol * ch.echo.volume /100
 ) {
-evs.push_back(MidiEvent(pos, 0, 0x90+ch.echo.channel, num, vol));
-evs.push_back(MidiEvent(pos+duration, 0, 0x90+ch.echo.channel, num, 0));
+evs.push_back(MidiEvent(pos, ch.track, 0x90+ch.echo.channel, num, vol));
+evs.push_back(MidiEvent(pos+duration, ch.track, 0x90+ch.echo.channel, num, 0));
 }
 if (!ch.onNoteOn.empty()) {
 lua_pushinteger(L, note);
@@ -427,7 +430,7 @@ evs.push_back(e);
 
 static void ParseNoteGroupIndic(lua_State* L, const MT_CMD& e, MT_CHAN& ch, MidiFile& m) {
 int n = ParseInt(L, e, ch, 2, 100);
-int r = n%2? 2 : 3;
+int r = n%2? 2 : (n%3? 3 : (n%5? 5 : 7));
 ch.groupMultiplierCount = n;
 ch.groupMultiplier = (r * m.ppq) / n;
 }
@@ -501,7 +504,7 @@ ch.pos += ParseDuration(L, e, ch, ch.multiplier);
 break;
 case 'R': case 'S': case 'Z':
 ch.prevPos = ch.pos;
-ch.pos -= ParseDuration(L, e, ch, ch.multiplier);
+ch.pos = std::max(0, ch.pos - ParseDuration(L, e, ch, ch.multiplier));
 break;
 case '<':
 ch.octave--;
@@ -513,9 +516,11 @@ case '&':
 ch.pos = ch.prevPos;
 break;
 case '[':
+if (ch.inChord) throw logic_error("already inside a chord");
 ch.inChord = true;
 break;
 case ']':
+if (!ch.inChord) throw logic_error("not in a chord");
 ch.inChord = false;
 ch.overriddenDuration = 0;
 break;
@@ -529,69 +534,70 @@ case 'P':
 ch.pos = ParseDuration(L, e, ch, ch.multiplier);
 break;
 case 'h':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xE0+curChan, ParseInt(L, e, ch, 0, 16383)));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xE0+curChan, ParseInt(L, e, ch, 0, 16383)));
 break;
 case 'H': 
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 101, 0));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 100, 0));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6,  ParseInt(L, e, ch, 0, 127) ));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 101, 0));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 100, 0));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 6,  ParseInt(L, e, ch, 0, 127) ));
 break;
 case 'w':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 1, ParseInt(L, e, ch, 0, 127)));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 1, ParseInt(L, e, ch, 0, 127)));
 break;
 case 'x':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 11, ParseInt(L, e, ch, 0, 127)));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 11, ParseInt(L, e, ch, 0, 127)));
 break;
 case 'V':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 7, ParseInt(L, e, ch, 0, 127)));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 7, ParseInt(L, e, ch, 0, 127)));
 break;
 case 'n': 
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 10, ParseInt(L, e, ch, 0, 127)));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 10, ParseInt(L, e, ch, 0, 127)));
 break;
 case 'u': 
-if (IsEmptyValue(e))  m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 66, 127));
-else  m.events.push_back(MidiEvent(ch.pos, 0, 0xD0+curChan, ParseInt(L, e, ch, 0, 127) ));
+if (IsEmptyValue(e))  m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 66, 127));
+else  m.events.push_back(MidiEvent(ch.pos, ch.track, 0xD0+curChan, ParseInt(L, e, ch, 0, 127) ));
 break;
 case 'U':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 66, 0));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 66, 0));
 break;
 case 'q':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 67, 127));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 67, 127));
 break;
 case 'Q':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 67, 0));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 67, 0));
 break;
 case 'j': 
-if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 65, 127));
-else m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 5, ParseInt(L, e, ch, 0, 127) ));
+if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 65, 127));
+else m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 5, ParseInt(L, e, ch, 0, 127) ));
 break;
 case 'J': 
-if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 65, 0));
-else m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 84, ParseInt(L, e, ch, 0, 127) ));
+if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 65, 0));
+else m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 84, ParseInt(L, e, ch, 0, 127) ));
 break;
 case 'k':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 64, 127));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 64, 127));
 break;
 case 'K':
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 64, 0));
+if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 64, 0));
+else ch.track = ParseInt(L, e, ch, 0, 127);
 break;
 case 'W': {
-int val = ParseInt(L, e, ch, 0, 16383);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 101, 0));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 100, 5));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6, val>>7));
-//m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 38, val&0x7F));
+int val = IsEmptyValue(e)? 256 : ParseInt(L, e, ch, 0, 16383);
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 101, 0));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 100, 5));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 6, val>>7));
+//m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 38, val&0x7F));
 }break;
 case 'p': case 'i': {
 int val = ParseInt(L, e, ch, 0, 2097151);
-if (val>127) m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 0, (val>>14)&0x7F));
-if (val>127) m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 32, (val>>7)&0x7F));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xC0+curChan, val&0x7F));
+if (val>127) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 0, (val>>14)&0x7F));
+if (val>127) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 32, (val>>7)&0x7F));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xC0+curChan, val&0x7F));
 }break;
 case 't': {
 int bpm = ParseInt(L, e, ch, 1, 60000000);
 int mpq = 60000000/bpm;
-MidiEvent ev(ch.pos, 0, 255, 0, 81);
+MidiEvent ev(ch.pos, ch.track, 255, 0, 81);
 ev.setDataAsInt24(mpq);
 ev.data2 = 81;
 m.events.push_back(ev);
@@ -617,13 +623,13 @@ default: throw logic_error(format("Unknown command: {}", e.cmd));
 
 // Long single letter commands
 else if (e.cmd.size()==1 && e.val.empty() && e.var.empty()) switch(e.cmd[0]){
-case 'X': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 1)); break;
-case 'C': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 2)); break;
-case 'T': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 3)); break;
-case 'I': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 4)); break;
-case 'L': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 5)); break;
-case 'R': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6)); break;
-case 'P': m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7)); break;
+case 'X': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 1)); break;
+case 'C': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 2)); break;
+case 'T': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 3)); break;
+case 'I': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 4)); break;
+case 'L': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 5)); break;
+case 'R': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 6)); break;
+case 'P': m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 7)); break;
 case 'M': m.events.push_back(CreateTimeSigEv(e, ch.pos)); break;
 case 'K': m.events.push_back(CreateKeySigEv(e, ch.pos)); break;
 case 'V': 
@@ -635,16 +641,16 @@ case 'A': {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
 int key = ParseInt(L, v[0], ch, 0, 127), 
 val = ParseInt(L, v[1], ch, 0, 127);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xA0+curChan, key, val));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xA0+curChan, key, val));
 }break;
 case 'p': case 'i': {
 vector<string> v = SplitLongValue(e,ch, 2, 3);
 int msb = v.size()==2? ParseInt(L, v[0], ch, 0, 16383) :
 (ParseInt(L, v[0], ch, 0, 127)<<7) | ParseInt(L, v[1], ch, 0, 127), 
 lsb = ParseInt(L, v[v.size() -1], ch, 0, 127);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 0, (msb>>7)&0x7F));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 32, msb&0x7F));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xC0+curChan, lsb&0x7F));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 0, (msb>>7)&0x7F));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 32, msb&0x7F));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xC0+curChan, lsb&0x7F));
 }break;
 default: throw logic_error(format("Unknown command: {}", e.cmd));
 }//switch single letter long command
@@ -654,7 +660,7 @@ else if (e.cmd==("ctrl")) {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
 int ctrl = ParseControllerIdOrName(L, v[0], ch);
 int val = ParseInt(L, v[1], ch, 0, 127);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, ctrl, val));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, ctrl, val));
 }
 else if (e.cmd=="slide") {
 vector<string> v = SplitLongValue(e,ch, 4, 6);
@@ -688,10 +694,10 @@ vhsb = ParseInt(L, v[2], ch, 0, 16383);
 vlsb = vhsb&0x7F;
 vhsb>>=7;
 }
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 101, chsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 100, clsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6, vhsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 38, vlsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 101, chsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 100, clsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 6, vhsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 38, vlsb));
 }
 else if (e.cmd==("nrpn")) {
 vector<string> v = SplitLongValue(e,ch, 3, 4);
@@ -707,10 +713,10 @@ vhsb = ParseInt(L, v[2], ch, 0, 16383);
 vlsb = vhsb&0x7F;
 vhsb>>=7;
 }
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 99, chsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 98, clsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 6, vhsb));
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, 38, vlsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 99, chsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 98, clsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 6, vhsb));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 38, vlsb));
 }
 else if (e.cmd==("echo")) {
 if (e.longval==("off")) { ch.echo.duration = ch.echo.volume = ch.echo.count = 0; }
@@ -755,7 +761,7 @@ int val = ParseInt(L, v[1], ch, 0, 127);
 int type = elt(v[0], -1, { "pitch", "filter", "volume", "vibrato", "filterlfo", "tremolo"  });
 if (type<0) type = ParseInt(L, v[0], ch, 0, 127);
 unsigned char data[] = { 127, 127, 9, 1, static_cast<unsigned char>(curChan), static_cast<unsigned char>(type), static_cast<unsigned char>(val), 247 };
-m.events.push_back(MidiEvent(ch.pos, 0, 240, data, sizeof(data)/sizeof(unsigned char)  ));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 240, data, sizeof(data)/sizeof(unsigned char)  ));
 }
 else if (e.cmd==("aftertouchdest")) {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
@@ -763,7 +769,7 @@ int val = ParseInt(L, v[1], ch, 0, 127);
 int type = elt(v[0], -1, { ("pitch"), ("filter"), ("volume"), ("vibrato"), "filterlfo", "tremolo" });
 if (type<0) type = ParseInt(L, v[0], ch, 0, 127);
 unsigned char data[] = { 127, 127, 9, 2, static_cast<unsigned char>(curChan), static_cast<unsigned char>(type), static_cast<unsigned char>(val), 247 };
-m.events.push_back(MidiEvent(ch.pos, 0, 240, data, sizeof(data)/sizeof(unsigned char) ));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 240, data, sizeof(data)/sizeof(unsigned char) ));
 }
 else if (e.cmd==("meta")) {
 vector<string> v = SplitLongValue(e,ch, 0, 1000000);
@@ -771,7 +777,7 @@ vector<unsigned char> out;
 int type = ParseInt(L, v[0], ch, 0, 127);
 v.erase(v.begin()+0);
 for (string& s: v) ParseIntOrStringAndAppend(L, out, ch, s);
-m.events.push_back(MidiEvent(ch.pos, 0, 255, &out[0], out.size(), type ));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 255, &out[0], out.size(), type ));
 }
 else if (e.cmd==("sysex")) {
 vector<string> v = SplitLongValue(e,ch, 0, 1000000);
@@ -779,15 +785,15 @@ vector<unsigned char> out;
 for (string& s: v) ParseIntOrStringAndAppend(L, out, ch, s);
 if (out.empty() || out[out.size() -1]!=247) out.push_back(247);
 for (int z=0, zn=out.size() -1; z<zn; z++) if (out[z]>=128) throw logic_error(format("Invalid byte in sysex message: value={}, offset={}", (int)out[z], z));
-m.events.push_back(MidiEvent(ch.pos, 0, 240, &out[0], out.size() ));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 240, &out[0], out.size() ));
 }
-else if (e.cmd==("text")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 1));
-else if (e.cmd==("copyright")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 2));
-else if (e.cmd==("title")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 3));
-else if (e.cmd==("instrument")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 4));
-else if (e.cmd==("lyric")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 5));
-else if (e.cmd==("mark")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 6));
-else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, 0, 255, (e.longval), 7));
+else if (e.cmd==("text")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 1));
+else if (e.cmd==("copyright")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 2));
+else if (e.cmd==("title")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 3));
+else if (e.cmd==("instrument")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 4));
+else if (e.cmd==("lyric")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 5));
+else if (e.cmd==("mark")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 6));
+else if (e.cmd==("cue")) m.events.push_back(MidiEvent(ch.pos, ch.track, 255, (e.longval), 7));
 else if (e.cmd==("||") || e.cmd==("|]") || e.cmd==("[|")) {
 if (IsEmptyValue(e) || HandleRepeat(L, e, ch, i))
 ch.repeatStack.pop_back();
@@ -832,7 +838,7 @@ int val;
 if (e.longval=="on") val=127;
 else if (e.longval=="off") val=0;
 else val = ParseInt(L, e.longval, ch, 0, 127);
-m.events.push_back(MidiEvent(ch.pos, 0, 0xB0+curChan, it->second, val));
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, it->second, val));
 }
 } catch (std::exception& ex) {
 throw syntax_error(ex.what(), e.begin);
@@ -840,7 +846,7 @@ throw syntax_error(ex.what(), e.begin);
 }
 
 static void CompileCommands (const vector<MT_CMD>& cmds, MidiFile& m, std::vector<std::pair<int,int>>& marks) {
-m.ppq = 480;
+m.ppq = DEFAULT_PPQN;
 m.nTracks = 0;
 
 vector<MT_CHAN> chans(16);

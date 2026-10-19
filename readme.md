@@ -311,7 +311,7 @@ CC names for ctrl, crc, slide,  and controlName(value) commands:
 - portatime, portamentotime  (5)
 - data, datamsb (6)
 - volume, vol (7)
-- balance (8)
+- balance, bal (8)
 - pan, panning  (10)
 - expression, expr  (11)
 - banklsb (32)

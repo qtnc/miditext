@@ -127,12 +127,14 @@ case 0xF0 ... 0xFF: break; // ignore
 
 static inline void MIDIOptimize (MidiFile& m, vector<vector<MidiEvent>>& out, vector<MidiEvent>& in) {
 int nTracks = 0, tickRes = m.ppq, tickLen = in.size()>0? in[in.size() -1].tick :0;
+bool keepTracks = std::any_of(in.begin(), in.end(), [](auto&e){ return e.track!=0; });
 for (MidiEvent& e: in) {
+if (!keepTracks){
 if (e.status>=0xF0) e.track = 0;
 else e.track = 1 + (e.status&0x0F);
+}
 if (e.status>=0x80 && e.status<0x90) { e.status += 0x10; e.data2=0; }
 nTracks = std::max(nTracks, e.track);
-//if (e.tick%tickRes) tickRes = e.tick%tickRes;
 tickRes = gcd(e.tick, tickRes);
 }
 if (m.ppq<=0x7FFF && tickRes>1) {
