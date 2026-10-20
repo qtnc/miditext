@@ -3,6 +3,8 @@
 #include "../common/bass.h"
 #include "../common/bassmidi.h"
 #include<string>
+#include<numeric>
+#include<algorithm>
 #include<unordered_map>
 #include<boost/regex.hpp>
 #include<sstream>
@@ -113,10 +115,10 @@ static unordered_map<std::string, int> CTRL_NAMES = {
 static const string ALTER_P1 = "#+^", ALTER_M1 = "_-";
 
 static const auto regoptions = regex_constants::perl | regex_constants::mod_s |  regex_constants::collate;
-static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w$-]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\})|(?'oct'-?\\d)?(?'cmd'[a-zA-Z])(?'alter'[=#_^+-]*)(?'abcoct'[,']*)(?'val'\\d*(?:/\\d*)?\\**)(?'var'(?:\\$[\\w\\d]+)?)(?'suffix'[<>!?~]*)|(?'cmd'[[({:]?\\|*[])}:]?|(?'symb'[&~^*/\\\\@#<>.,;'+-])\\k<symb>*)(?'val'\\d*))";
+static const string reg1t = "\\G\\s*\\K(?:(?'cmd'[a-zA-Z$]+)(?:[:=](?'longval'[/\\w$-]\\S*)|\\((?'longval'[^()]*)\\)|\\{(?'longval'[^{}]*)\\})|(?'oct'-?\\d)?(?'cmd'[a-zA-Z])(?'alter'[=#_^+-]*)(?'abcoct'[,']*)(?'val'\\d*(?:/+\\d*)?\\**)(?'var'(?:\\$[\\w\\d]+)?)(?'suffix'[<>!?~]*)|(?'cmd'[[({:]?\\|*[])}:]?|(?'symb'[&~^*/\\\\@#<>.,;'+-])\\k<symb>*)(?'val'\\d*(?:/+\\d*)?\\**))";
 static const string reg0t = "^[/#;][^\r\n]*$";
 	static const tregex reg1(reg1t, regoptions), reg0(reg0t, regoptions);
-static const string regpd2t = ("^(\\d*)(/\\d*)?(\\*?)$");
+static const string regpd2t = ("^(\\d*)(?:(/+)(\\d*))?(\\**)$");
 static tregex regpd2(regpd2t, regoptions);
 
 
@@ -220,14 +222,17 @@ const auto mtype = match_flag_type::match_default;
 const char *valBegin = str.data(), *valEnd = valBegin + str.size();
 tcmatch m;
 if (!regex_search(valBegin, valEnd, m, regpd2, mtype)) return multiplier;
-string numS = sub(m[1]), denomS = sub(m[2]), dottedS = sub(m[3]);
-int num = numS.empty()? 1 : stoi(numS), denom = 1;
-bool dotted = !dottedS.empty();
-if (denomS==("/")) denom=2;
-else if (denomS==("//")) denom=4;
-else if (!denomS.empty()) denom = stoi(denomS.substr(1));
-if (dotted) return 3 * multiplier * num / (2 * denom);
-else return multiplier * num / denom;
+string numS = sub(m[1]), fracS = sub(m[2]), denomS = sub(m[3]), dotS = sub(m[4]);
+int num = numS.empty()? 1 : stoi(numS);
+int denom = denomS.empty()? 1 : stoi(denomS);
+for (int i=denomS.empty()?0:1, n=fracS.size(); i<n; i++) denom*=2;
+if (!dotS.empty()) { 
+int d=dotS.size(), n=1;
+for (int i=0; i<d; i++) n*=2;
+num *= 2*n -1;
+denom *= n;
+}
+return multiplier * num / denom;
 }
 
 static inline int ParseDuration(lua_State* L, const string& str, MT_CHAN& ch, int multiplier) {
@@ -429,11 +434,17 @@ evs.push_back(e);
 }}
 
 static void ParseNoteGroupIndic(lua_State* L, const MT_CMD& e, MT_CHAN& ch, MidiFile& m) {
-int n = ParseInt(L, e, ch, 2, 100);
+int l = ch.multiplier, n = ParseDuration(L, e, ch, l);
+if (n%l==0) {
+n/=l;
 int r = n%2? 2 : (n%3? 3 : (n%5? 5 : 7));
 ch.groupMultiplierCount = n;
-ch.groupMultiplier = (r * m.ppq) / n;
-}
+ch.groupMultiplier = r * l / n;
+} else {
+int d = gcd(n, l);
+ch.groupMultiplierCount = n/d;
+ch.groupMultiplier = l * l / n; 
+}}
 
 static bool HandleRepeat (lua_State* L, const MT_CMD& e, MT_CHAN& ch, int& pos) {
 if (ch.repeatStack.empty()) ch.repeatStack.emplace_back( 1, 0);
@@ -578,8 +589,7 @@ case 'k':
 m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 64, 127));
 break;
 case 'K':
-if (IsEmptyValue(e)) m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 64, 0));
-else ch.track = ParseInt(L, e, ch, 0, 127);
+m.events.push_back(MidiEvent(ch.pos, ch.track, 0xB0+curChan, 64, 0));
 break;
 case 'W': {
 int val = IsEmptyValue(e)? 256 : ParseInt(L, e, ch, 0, 16383);
@@ -637,6 +647,11 @@ curChan = ParseInt(L, e.longval, ch, 1, 16) -1;
 lua_pushinteger(L, curChan+1);
 lua_setglobal(L,"channel");
 break;
+case 'J': 
+ch.track = ParseInt(L, e.longval, ch, 1, 16) -1; 
+lua_pushinteger(L, ch.track+1);
+lua_setglobal(L,"track");
+break;
 case 'A': {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
 int key = ParseInt(L, v[0], ch, 0, 127), 
@@ -656,6 +671,16 @@ default: throw logic_error(format("Unknown command: {}", e.cmd));
 }//switch single letter long command
 
 // Elaborate commands
+else if (e.cmd=="voice") {
+curChan = ParseInt(L, e.longval, ch, 1, 16) -1; 
+lua_pushinteger(L, curChan+1);
+lua_setglobal(L,"channel");
+}
+else if (e.cmd=="track") {
+ch.track = ParseInt(L, e.longval, ch, 1, 16) -1; 
+lua_pushinteger(L, ch.track+1);
+lua_setglobal(L,"track");
+}
 else if (e.cmd==("ctrl")) {
 vector<string> v = SplitLongValue(e,ch, 2, 2);
 int ctrl = ParseControllerIdOrName(L, v[0], ch);

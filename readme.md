@@ -128,15 +128,16 @@ Notes: optional octave + note letter + optional alteration + optional duration +
 - Octaves can also be given in ABC-style, with `'` and `,` characters placed after note and length, e.g. `c,` is equivalent to `C` and `C'` is equivalent to `c`.
 - A note can be followed by an alteration: one of `#+^` for sharp, one of `-_` for flat
 - A note can be followed by its length/duration, by default when omited the duration is one  quarter note or the default note length if it has been specified
-- Duration is indicated as n/d, where n is the numerator and d the denominator. Both can be omited and if so, both are set to 1. 
-For example, if we assume that default note length is a quarter note, 2 would indicate an half note (2/1), and /2 whould indicate an eight note (1/2). / alone is a shorten for 1/2.
-IF the default note length is  set to an eight note, 4 would represent an half note and /4 a 32th note.
+- Duration is indicated as n/d, where n is the numerator and d the denominator. Both can be omited and if so, both are set to 1.
+For example, if we assume that default note length is a quarter note, 2 would indicate an half note (2/1), and /2 whould indicate an eight note (1/2). / alone is a shorten for 1/2, // is a shorten for 1/4, /// for 1/8 and so on.
+If the default note length is  set to an eight note, 4 would represent an half note and /4 a 32th note.
+- Notes can be dotted with `*` after the duration, for example `c*` is equivalent to `c3/2`. Double and triple dots are also supported, `c**` means `c7/8` and `c***` means `c15/16`.
 - Notes can be separated with spaces, or glued together as long as there is no ambiguity. Numbers are preferably taken as lengths rather than octave indications.
 
 Examples:
 
 - `C4` is a simple C full note
-- `1e/4` is a E one octave above the current octave and is a 16th note, which could also have been written `e/4'`
+- `1e/4` is a E one octave above the current octave and is a 16th note, which could also have been written `e/4'` or `e//`
 - `-1B_/` is an eighth note flat B, one octave below the current octave, which could also been written `B_/,`
 - `c2d2e2` are three half notes C, D and E played one after the other
 
@@ -146,14 +147,20 @@ Chords can be written in two ways:
 - Bracketed notation: `[c4eg]`
 - Ampersant notation: `c2&e2&g2`
 
-- With the bracketed notation, all notes have the same length given by the first note. 
-- With the ampersant notation, all notes may have different lengths and this isn't an error.
+- With the bracketed notation, all notes have the same length given by the first note. Length of  next notes are ignored and they all take the length of the first note.
+- With the ampersant notation, all notes may have different lengths.
 
-## Other notations and rhythms
+## Broken and special rhythms
 A few characters have a special meaning when they follow immediately a note length. For that special meaning to take effect, there shouldn't be any space between the note length and the modification characters.
 
 - `>` and `<` denote broken rhythms. `A>B` means `A4/3 B2/3` and `A<B` means `A2/3 B4/3`.
 - `!?~` are currently reserved but have no use
+
+## Duplets, triplets, n-uplets and groups
+A group denoted by `(n/t ... )` or `(n ... )` creates a group of n notes played in t tences.
+When t is omited, it is set to 2, 3 or 5 depending on n. 2, 3, 4, 5, 6, 7, 8 is equivalent to resp. 2/3, 3/2, 4/3, 5/2, 6/5, 7/2, 8/3, etc.
+Hence, a duplet is `(2ab)` meaning two notes played in three tences, a triplet is `(3abc)` meaning three notes played in two tences, etc.
+Notes and parens can be sepearated by spaces, but n or n/t must be guiled to the open paren.
 
 ## Repeatition and bars
 
@@ -259,7 +266,7 @@ Long commands are again identified by a single letter, but accept longer paramet
 - G: unused
 - H: unused
 - I or instrument: instrument name (MIDI meta 4)
-- J: unused
+- J or track: MIDI track number for following commands
 - K: key signature, in the form of note+optional alteration + 'M' (major) or 'm' (minor). For example, Gm=G minor, E_M=E flat major
 - L or lyric: song lyrics (MIDI meta 5)
 - M: time signature (aka meter), in the form numerator/denominator. For example 3/4, 4/4, 6/8
@@ -271,7 +278,7 @@ Long commands are again identified by a single letter, but accept longer paramet
 - S: unused
 - T or title: song title (MIDI meta 3)
 - U: unused
-- V: voice/channel number selection for following commands
+- V or voice: voice / MIDI channel number selection for following commands
 - W: unused
 - X or text: any text (MIDI meta 1)
 - Y: unused
@@ -302,7 +309,8 @@ Elaborate commands are like long commands, except that the command is a word rat
 If a note falls on a beat, the position in the bar gives the value to take. If the note falls outside of a beat, the other (last value) is taken.
 Example: for the notes abc/d/ef2g2 and velpattern(100, 90, 85, 80, 75, 1), the velocity of a is 100% (beat 1/4), b 90% (beat 2/4), c 85% (beat 3/4), d 75% (beat 3.5/4), e 80% (beat 4/4), f 100% (beat 1/4) and g 85% (beat 3/4).
 
-CC names for ctrl, crc, slide,  and controlName(value) commands:
+## CC names 
+controller names for ctrl, crc, slide,  and controlName(value) commands
 
 - bank, bankmsb (0)
 - vibrato, modulation, vib, mod  (1)
@@ -327,7 +335,7 @@ CC names for ctrl, crc, slide,  and controlName(value) commands:
 - attack (73)
 - brightness, filtercutoff (74)
 - decay (75)
-- vibratorate, vibratospeed, vibspeed  (76)
+- vibratorate, vibratospeed, vibrate, vibspeed  (76)
 - vibratodepth, vibdepth  (77)
 - vibratodelay, vibdelay (78)
 - portanote, portamentonote (84)
