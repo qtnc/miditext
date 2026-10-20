@@ -273,10 +273,30 @@ if (!abs) time += BASS_ChannelBytes2Seconds(curStream, BASS_ChannelGetPosition(c
 BASS_ChannelSetPosition(curStream, BASS_ChannelSeconds2Bytes(curStream, time), BASS_POS_BYTE);
 }
 
+void App::startVirtualKeyboard () {
+stopVirtualKeyboard();
+DWORD flags = BASS_SAMPLE_FLOAT | BASS_STREAM_AUTOFREE;
+vkbStream = BASS_MIDI_StreamCreate(16, flags, 0);
+if (!vkbStream) return;
+BASS_ChannelSetAttribute(vkbStream, BASS_ATTRIB_VOL, streamVol);
+BASS_ChannelPlay(vkbStream, false);
+}
+
+void App::stopVirtualKeyboard () {
+if (vkbStream) BASS_ChannelStop(vkbStream);
+vkbStream=0;
+}
+
+void App::startStopVirtualKeyboard () {
+if (vkbStream) stopVirtualKeyboard();
+else startVirtualKeyboard();
+}
+
 void App::changeVol (float value, bool abs) {
 if (!abs) value += streamVol;
 streamVol = std::max(0.01f, std::min(value, 1.0f));
 if (curStream) BASS_ChannelSetAttribute(curStream, BASS_ATTRIB_VOL, streamVol);
+if (vkbStream) BASS_ChannelSetAttribute(vkbStream, BASS_ATTRIB_VOL, streamVol);
 }
 
 void App::loadFile (const string& filename) {

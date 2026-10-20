@@ -56,6 +56,10 @@ void OnFind (wxCommandEvent&e );
 void OnFindNext (wxCommandEvent&e );
 void OnFindPrev (wxCommandEvent&e );
 void OnFindReplace (wxCommandEvent&e );
+
+void OnKeyDown (wxKeyEvent& e);
+void OnKeyUp (wxKeyEvent& e);
+void OnKeyChar (wxKeyEvent& e);
 };
 
 #endif

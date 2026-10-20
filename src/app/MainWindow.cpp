@@ -42,6 +42,10 @@ println("Initializing main window GUI...");
 auto panel = new wxPanel(this);
 textArea = new wxTextCtrl(panel, wxID_ANY, "", wxDefaultPosition, wxDefaultSize, wxTE_MULTILINE | wxTE_RICH2 | wxTE_NOHIDESEL | wxVSCROLL | wxHSCROLL | wxALWAYS_SHOW_SB);
 textArea->SetMaxLength(16777215);
+textArea->Bind(wxEVT_KEY_DOWN,  &MainWindow::OnKeyDown, this); 
+textArea->Bind(wxEVT_KEY_UP,  &MainWindow::OnKeyUp, this); 
+textArea->Bind(wxEVT_CHAR,  &MainWindow::OnKeyChar, this); 
+
 status = CreateStatusBar();
 
 auto panelSizer = new wxBoxSizer(wxVERTICAL);
@@ -79,6 +83,7 @@ playMenu->Append(IDM_SEEK_FWD2, U(translate("SeekFwd2")));
 playMenu->Append(IDM_VOLUME_DOWN, U(translate("VolumeDown")));
 playMenu->Append(IDM_VOLUME_UP, U(translate("VolumeUp")));
 playMenu->AppendCheckItem(IDM_LOOP, U(translate("PlayLoop")));
+recMenu->Append(IDM_VKB_START_STOP, U(translate("StartVKB")));
 recMenu->Append(IDM_REC_START_STOP, U(translate("StartRec")));
 recMenu->Append(IDM_SELINST, U(translate("SelectInstrument")));
 helpMenu->Append(wxID_ABOUT, U(translate("About")));
@@ -106,6 +111,7 @@ Bind(wxEVT_MENU, [&](auto&e){ app.seekPlayback(-5); }, IDM_SEEK_BKWD);
 Bind(wxEVT_MENU, [&](auto&e){ app.seekPlayback(-30); }, IDM_SEEK_BKWD2);
 Bind(wxEVT_MENU, [&](auto&e){ app.changeVol(-0.02f); }, IDM_VOLUME_DOWN);
 Bind(wxEVT_MENU, [&](auto&e){ app.changeVol(0.02f); }, IDM_VOLUME_UP);
+Bind(wxEVT_MENU, [&](auto&e){ app.startStopVirtualKeyboard(); }, IDM_VKB_START_STOP);
 Bind(wxEVT_MENU, [this](auto&e){ TransposeSelection(1); }, IDM_TRANSPOSE_UP);
 Bind(wxEVT_MENU, [this](auto&e){ TransposeSelection(-1); }, IDM_TRANSPOSE_DOWN);
 Bind(wxEVT_MENU, [this](auto&e){ ConvertFromV3(this);  }, IDM_CONVERT_FROM_V3);
@@ -117,6 +123,7 @@ Bind(wxEVT_MENU, &MainWindow::OnFindReplace, this, IDM_FIND_REPLACE);
 Bind(wxEVT_MENU, &MainWindow::OnAbout, this, wxID_ABOUT);
 Bind(wxEVT_CLOSE_WINDOW, &MainWindow::OnClose, this);
 Bind(wxEVT_THREAD, &MainWindow::OnProgress, this);
+
 textArea->SetFocus();
 SetSizerAndFit(panelSizer);
 
@@ -337,7 +344,8 @@ SoundfontPreset* p = nullptr;
 InstrumentDialog id(app, this, [&](auto q)mutable{ p=q; });
 if (id.ShowModal()==wxID_OK) {
 int preset = p->dval&0x7F, banklsb = (p->dval>>16)&0x7F, bank = (p->dval>>23)&0x7F;
-textArea->WriteText(U(format("p({}, {}, {}) ", bank, banklsb, preset)));
+if (app.vkbStream) app.virtualKeyboardChangeInstrument(banklsb, bank, preset);
+else textArea->WriteText(U(format("p({}, {}, {}) ", bank, banklsb, preset)));
 }}
 
 void MainWindow::OnPlayPause () { 
@@ -484,6 +492,21 @@ wxRegEx reg(find, wxRE_NEWLINE | (lastFind.icase? wxRE_ICASE : 0));
 reg.Replace(&text, lastFind.replace);
 textArea->SetValue(text);
 textArea->SetSelection(start, end);
+}
+
+void MainWindow::OnKeyDown (wxKeyEvent& e) {
+App& app = wxGetApp();
+if (!app.vkbStream || e.AltDown() || e.ControlDown() || !app.virtualKeyboardKeyDown(e))  e.Skip(); 
+}
+
+void MainWindow::OnKeyUp (wxKeyEvent& e) {
+App& app = wxGetApp();
+if (!app.vkbStream || e.AltDown() || e.ControlDown() || !app.virtualKeyboardKeyUp(e)) e.Skip(); 
+}
+
+void MainWindow::OnKeyChar (wxKeyEvent& e) {
+App& app = wxGetApp();
+if (!app.vkbStream || e.AltDown() || e.ControlDown()) e.Skip(); 
 }
 
 void MainWindow::OnClose (wxCloseEvent& e) {

@@ -29,6 +29,7 @@
 #define IDM_VOLUME_DOWN 1208
 #define  IDM_REC_START_STOP 1300
 #define IDM_SELINST 1301
+#define IDM_VKB_START_STOP 1302
 
 #define JFW 0
 #define WINDOWSEYE 1

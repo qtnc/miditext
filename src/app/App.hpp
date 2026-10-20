@@ -32,6 +32,7 @@ std::string curFile, curSelectedFile;
 bool loop = false;
 float streamVol = 0.2f;
 DWORD curStream = 0;
+DWORD vkbStream = 0;
 
 bool initDirs ();
 bool initConfig ();
@@ -60,6 +61,12 @@ void stopPlayback ();
 void pausePlayback ();
 void seekPlayback (double time, bool absolute = false);
 void changeVol (float value, bool absolute = false);
+void startVirtualKeyboard ();
+void stopVirtualKeyboard ();
+void startStopVirtualKeyboard ();
+bool virtualKeyboardKeyDown (wxKeyEvent& e);
+bool virtualKeyboardKeyUp (wxKeyEvent& e);
+void virtualKeyboardChangeInstrument (int banklsb, int bankmsb, int program);
 };
 
 template <class F> inline void RunEDT (const F& f) {
