@@ -6,6 +6,7 @@
 #include <wx/listctrl.h>
 #include "../common/bass.h"
 #include "../common/bassmidi.h"
+#include "../common/println.hpp"
 using namespace std;
 
 extern DWORD CompileMidiAsStream (const string& code, DWORD flags);
@@ -87,7 +88,7 @@ auto& app = this->app;
 if (!p) return;
 string code = getTestCode(p->sval);
 tfTestCode->SetValue(U(code));
-app.win->setTimeout(600, [=,&app](){ 
+app.win->setTimeout(600, [=,&app](){
 try {
 app.curStream = CompileMidiAsStream(code, BASS_STREAM_AUTOFREE | BASS_SAMPLE_FLOAT);
 } catch (syntax_error& e) {
@@ -127,8 +128,9 @@ lcList->Focus(selection);
 SoundfontPreset* InstrumentDialog::getSelectedPreset () {
 int i = lcList->GetFirstSelected();
 if (i<0) return nullptr;
-auto iptr = lcList->GetItemData(i);
-return reinterpret_cast<SoundfontPreset*>(iptr);
+i = lcList->GetItemData(i);
+if (i<0 || i>=app.sfmap.presets.size()) return nullptr;
+else return &app.sfmap.presets[i];
 }
 
 void InstrumentDialog::updateList () {
@@ -145,18 +147,18 @@ lcList->AppendColumn(U(translate("hdrBank")), wxLIST_FORMAT_RIGHT);
 lcList->AppendColumn(U(translate("hdrBankLSB")), wxLIST_FORMAT_RIGHT);
 lcList->AppendColumn(U(translate("hdrPreset")), wxLIST_FORMAT_RIGHT);
 int itemIndex = -1;
-for (auto& p: app.sfmap.presets) {
+for (int i=0, n=app.sfmap.presets.size(); i<n; i++) {
+auto& p = app.sfmap.presets[i];
 if (!filter.empty() && iFilter<0 && !icontains(p.name, filter)) continue;
 int preset = p.dval&0x7F, banklsb = (p.dval>>16)&0x7F, bank = (p.dval>>23)&0xFF;
 if (iFilter>=0 && preset!=iFilter && bank!=iFilter && banklsb!=iFilter) continue;
-auto iptr = reinterpret_cast<intptr_t>(&p);
 lcList->InsertItem(++itemIndex, wxEmptyString);
 lcList->SetItem(itemIndex, 1, U(p.name + ". "));
 lcList->SetItem(itemIndex, 2, U(to_string(bank) + ", "));
 lcList->SetItem(itemIndex, 3, U(to_string(banklsb) + ", "));
 lcList->SetItem(itemIndex, 4, U(to_string(preset)));
-lcList->SetItemData(itemIndex, iptr);
-if (iptr==selection) newSelection = itemIndex;
+lcList->SetItemData(itemIndex, i);
+if (selection==i) newSelection = itemIndex;
 }
 lcList->Thaw();
 lcList->Select(newSelection);
