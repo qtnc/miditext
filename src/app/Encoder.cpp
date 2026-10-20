@@ -7,6 +7,7 @@ extern void encAddMP3 ();
 extern void encAddOGG ();
 extern void encAddFlac ();
 extern void encAddOpus ();
+extern void encAddWAV ();
 
 vector<shared_ptr<Encoder>> Encoder::encoders;
 
@@ -16,5 +17,6 @@ encAddMP3();
 encAddOGG();
 encAddOpus();
 encAddFlac();
+encAddWAV();
 }
 
